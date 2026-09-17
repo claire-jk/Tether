@@ -39,6 +39,14 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private int maxHealCharges = 3;       // Q 鍵回血最大次數
     private int currentHealCharges;
 
+    [Header("主角血量設定")]
+    [SerializeField] private float maxHealth = 100f;
+    private float currentHealth;
+
+    // 提供給 UI 讀取的公用屬性 (Property)
+    public float MaxHealth => maxHealth;
+    public float CurrentHealth => currentHealth;
+
     // 內部物理與狀態變數
     private Rigidbody2D rb;
     private bool isGrounded;
@@ -63,7 +71,8 @@ public class PlayerController : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
-        currentHealCharges = maxHealCharges; // 初始補滿回血次數
+        currentHealCharges = maxHealCharges;
+        currentHealth = maxHealth; // 初始化主角血量
     }
 
     private void Update()
@@ -284,7 +293,7 @@ public class PlayerController : MonoBehaviour
         // 限制最高為第 4 段，打完第 4 段後重置
         if (comboStep > 4) comboStep = 1;
 
-        // 棺槨四段擊附帶微幅前沖（Dash A/D 概念）
+        // 棺槨四段擊附帶微幅前衝（Dash A/D 概念）
         float facingDir = isFacingRight ? 1f : -1f;
         rb.linearVelocity = new Vector2(facingDir * comboForwardImpulse * comboStep, rb.linearVelocity.y);
 
@@ -411,7 +420,6 @@ public class PlayerController : MonoBehaviour
 
     public void TakeDamageFromEnemy(float damage)
     {
-        // 當處於【收回狀態】且夥伴尚未停機時，由 Partner 代替承傷
         if (switchManager != null && switchManager.currentState == GameControlState.Recalled)
         {
             if (partnerController != null && !partnerController.IsDisabled)
@@ -421,8 +429,9 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // 若 Partner 已停機，或在【放出狀態】，由主角本體承傷
-        Debug.Log($"<color=red>[Player] 主角本體受到傷害：{damage}</color>");
+        // 當在放出狀態，或夥伴已停機時，由主角本體扣血
+        currentHealth = Mathf.Max(0f, currentHealth - damage);
+        Debug.Log($"<color=red>[Player] 主角受到傷害：{damage}，剩餘血量：{currentHealth}/{maxHealth}</color>");
     }
 
     private void HandleFacing()
