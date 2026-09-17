@@ -11,10 +11,18 @@ public class PartnerController : MonoBehaviour
     [Header("追隨與 AI 移動設定")]
     [SerializeField] private Vector3 followOffset = new Vector3(-1.5f, 1f, 0f); // 懸浮偏移量
     [SerializeField] private float followSpeed = 8f;     // 平滑追隨速度
-    [SerializeField] private float aiMoveSpeed = 5f;     // 衝向 Boss 速度
+    [SerializeField] private float aiMoveSpeed = 5f;     // 一般接近 Boss 速度
     [SerializeField] private float attackRange = 1.5f;   // AI 攻擊距離
     [SerializeField] private float attackInterval = 1f;  // AI 自動攻擊間隔
     private float nextAttackTime;
+
+    [Header("登場衝刺設定")]
+    [Tooltip("剛被 E 鍵放出時衝向 Boss 的超高速")]
+    [SerializeField] private float rushSpeed = 25f;        // 登場極速衝刺速度
+    [Tooltip("登場衝刺的最長持續時間（秒）")]
+    [SerializeField] private float rushDuration = 0.5f;     // 衝刺持續時間
+    private float rushTimer = 0f;                          // 衝刺計時器
+    private bool isRushing = false;                        // 是否正在衝刺狀態
 
     [Header("血量與停機規則")]
     [SerializeField] private float maxHealth = 100f;
@@ -38,6 +46,25 @@ public class PartnerController : MonoBehaviour
         partnerCollider = GetComponent<Collider2D>();
         rb = GetComponent<Rigidbody2D>();
         currentHealth = maxHealth;
+    }
+
+    // 每次物件被 SetActive(true)（即按下 E 放出夥伴）時觸發
+    private void OnEnable()
+    {
+        TriggerRushToBoss();
+    }
+
+    /// <summary>
+    /// 觸發登場高速突進衝向 Boss
+    /// </summary>
+    public void TriggerRushToBoss()
+    {
+        if (bossTransform != null && !isDisabled)
+        {
+            isRushing = true;
+            rushTimer = rushDuration;
+            Debug.Log("<color=orange>[Partner AI] 登場！發動超高速突進衝向 Boss！</color>");
+        }
     }
 
     private void Update()
@@ -71,7 +98,8 @@ public class PartnerController : MonoBehaviour
         }
         else
         {
-            // 收回狀態：隱藏夥伴並重置位置至主角本體
+            // 收回狀態：隱藏夥伴並重置位置至主角本體，同時終止衝刺
+            isRushing = false;
             SetPartnerActive(false);
             transform.position = playerTransform.position;
         }
@@ -95,9 +123,40 @@ public class PartnerController : MonoBehaviour
 
     private void HandleBossAttackAI()
     {
-        // 修正：只計算水平 X 軸的距離，避免 Boss 在空中時 partner 算出來的距離永遠過大
+        // 只計算水平 X 軸距離
         float distanceX = Mathf.Abs(transform.position.x - bossTransform.position.x);
 
+        // 【新增】：優先處理登場高速衝刺
+        if (isRushing)
+        {
+            rushTimer -= Time.deltaTime;
+
+            // 衝向 Boss 的水平方向
+            float directionX = Mathf.Sign(bossTransform.position.x - transform.position.x);
+
+            if (rb != null)
+            {
+                rb.linearVelocity = new Vector2(directionX * rushSpeed, rb.linearVelocity.y);
+            }
+            else
+            {
+                transform.position = Vector3.MoveTowards(
+                    transform.position,
+                    new Vector3(bossTransform.position.x, transform.position.y, transform.position.z),
+                    rushSpeed * Time.deltaTime
+                );
+            }
+
+            // 若已抵達攻擊範圍或衝刺時間結束，終止衝刺模式
+            if (distanceX <= attackRange || rushTimer <= 0f)
+            {
+                isRushing = false;
+            }
+
+            return; // 衝刺期間跳過一般追擊與攻擊邏輯
+        }
+
+        // 一般接近 Boss 與攻擊邏輯
         if (distanceX > attackRange)
         {
             if (isAttacking) return;

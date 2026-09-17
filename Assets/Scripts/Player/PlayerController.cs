@@ -33,10 +33,12 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private GameObject primaryBulletPrefab;  // 普攻彈 Prefab
     [SerializeField] private Transform firePoint;            // 開火點 Transform
     [SerializeField] private float primaryFireRate = 0.15f;    // 普攻彈連射間隔時間 (秒)
+    [SerializeField] private float utilityFireRate = 2.0f;     // 【新增企劃需求】右鍵功能彈冷卻時間 (秒)
     [SerializeField] private GameObject formationPrefab;     // 陣式 Prefab
-    private FormationArea activeFormation;                  // 當前場上的陣式實體
+    private FormationArea activeFormation;                   // 當前場上的陣式實體
     private bool isPreparingFormation = false;               // 是否處於 R 鍵陣式預預瞄準狀態
     private float nextPrimaryFireTime = 0f;                  // 普攻彈下次可射擊時間點
+    private float nextUtilityFireTime = 0f;                  // 【新增】功能彈下次可射擊時間點
 
     [Header("機體資源")]
     [SerializeField] private int maxHealCharges = 3;       // Q 鍵回血最大次數
@@ -125,29 +127,6 @@ public class PlayerController : MonoBehaviour
                 HandleDeployedRangedInputs();
             }
         }
-        /*
-        //測試
-        // 5. 核心：根據 SwitchManager 狀態進行戰鬥輸入分流
-        if (switchManager != null)
-        {
-            if (switchManager.currentState == GameControlState.Recalled)
-            {
-                // 【收回狀態】：近戰體術招式組
-                HandleRecalledCombatInputs();
-            }
-            else
-            {
-                // 【放出狀態】：遠程彈藥系統
-                HandleDeployedRangedInputs();
-            }
-        }
-
-        // --- 【除錯測試用】按下 K 鍵讓玩家扣 15 點血 ---
-        if (Input.GetKeyDown(KeyCode.K))
-        {
-            TakeDamageFromEnemy(15f);
-        }
-        */
     }
 
     private void FixedUpdate()
@@ -369,10 +348,18 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // 2. 右鍵功能彈（自動鎖定夥伴方向發射）
+        // 2. 右鍵功能彈（自動鎖定夥伴方向發射，帶冷卻判斷）
         if (Input.GetMouseButtonDown(1))
         {
-            ShootUtilityBulletToPartner();
+            if (Time.time >= nextUtilityFireTime)
+            {
+                ShootUtilityBulletToPartner();
+                nextUtilityFireTime = Time.time + utilityFireRate;
+            }
+            else
+            {
+                Debug.Log($"<color=yellow>[Deployed] 功能彈冷卻中... 剩餘 {(nextUtilityFireTime - Time.time):F1} 秒</color>");
+            }
         }
 
         // 3. R 鍵陣式彈（預備 / 取消預備 / 手動收回場上陣式）
@@ -415,7 +402,8 @@ public class PlayerController : MonoBehaviour
         Bullet bullet = bulletObj.GetComponent<Bullet>();
         if (bullet != null)
         {
-            bullet.Initialize(directionToPartner, GetComponent<Collider2D>());
+            // 發射功能彈（例：大子彈、青色、傳遞修復/增幅功能）
+            bullet.Initialize(directionToPartner, GetComponent<Collider2D>(), customDamage: 0f, customSpeed: 12f, customScale: new Vector3(1.5f, 1.5f, 1f), isUtility: true);
         }
 
         // 觸發 Partner 的協同追擊

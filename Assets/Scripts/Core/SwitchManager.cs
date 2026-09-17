@@ -3,14 +3,19 @@ using UnityEngine;
 // 定義雙機體狀態
 public enum GameControlState
 {
-    Deployed,   // 放出狀態（控制主角，夥伴跟隨）
-    Recalled    // 收回狀態（控制夥伴/合併，獲得二段跳）
+    Deployed,   // 放出狀態（遠程彈藥模式，夥伴獨立存在）
+    Recalled    // 收回狀態（近戰體術模式，夥伴隱藏並提供二段跳）
 }
 
 public class SwitchManager : MonoBehaviour
 {
+    [Header("物件引用")]
+    [Tooltip("請將 Hierarchy 中的 Partner 物件拖入此欄位")]
+    [SerializeField] private GameObject partnerObject;
+
     [Header("狀態設定")]
-    public GameControlState currentState = GameControlState.Deployed;
+    [Tooltip("當前機體狀態，預設開局為 Recalled (收回狀態)")]
+    public GameControlState currentState = GameControlState.Recalled;
 
     [Header("冷卻與格擋參數")]
     [SerializeField] private float switchCooldown = 1.5f;       // 切換冷卻時間（秒）
@@ -22,6 +27,18 @@ public class SwitchManager : MonoBehaviour
     // 外部程式存取：檢查當前是否處於完美格擋狀態
     public bool IsParryActive => parryWindowTimer > 0f;
 
+    private void Awake()
+    {
+        // 強制在最早期生命週期（第一幀前）確認初始狀態為 Recalled
+        currentState = GameControlState.Recalled;
+    }
+
+    private void Start()
+    {
+        // 遊戲啟動時根據初始狀態初始化夥伴的顯示與隱藏
+        UpdatePartnerVisibility();
+    }
+
     private void Update()
     {
         // 更新完美格擋倒數計時
@@ -30,13 +47,16 @@ public class SwitchManager : MonoBehaviour
             parryWindowTimer -= Time.deltaTime;
         }
 
-        // 偵測玩家按下 E 鍵
+        // 偵測玩家按下 E 鍵進行機體狀態切換
         if (Input.GetKeyDown(KeyCode.E))
         {
             TrySwitchState();
         }
     }
 
+    /// <summary>
+    /// 嘗試執行狀態切換與冷卻檢查
+    /// </summary>
     private void TrySwitchState()
     {
         // 檢查冷卻時間
@@ -47,7 +67,7 @@ public class SwitchManager : MonoBehaviour
             return;
         }
 
-        // 執行狀態切換
+        // 執行狀態切換邏輯
         if (currentState == GameControlState.Deployed)
         {
             // 從「放出」切換為「收回」
@@ -62,7 +82,40 @@ public class SwitchManager : MonoBehaviour
             Debug.Log("<color=green>[Switch] 放出夥伴！進入遠程輸出模式</color>");
         }
 
-        // 設定下次可切換的時間
+        // 切換狀態後即時更新夥伴實體顯隱與位置
+        UpdatePartnerVisibility();
+
+        // 計算下次可切換的時間點
         nextSwitchTime = Time.time + switchCooldown;
+    }
+
+    /// <summary>
+    /// 根據當前狀態控制 Partner 物件的顯示、隱藏與出現位置
+    /// </summary>
+    private void UpdatePartnerVisibility()
+    {
+        if (partnerObject == null)
+        {
+            Debug.LogError("<color=red>[SwitchManager] 未設定 partnerObject！請在 Inspector 面板將 Hierarchy 中的 Partner 拖入 GameManager 的 Partner Object 欄位中！</color>");
+            return;
+        }
+
+        if (currentState == GameControlState.Deployed)
+        {
+            // 放出狀態：啟用 Partner 物件
+            partnerObject.SetActive(true);
+
+            // 將 Partner 移至玩家身側，避免從舊位置遠距離憑空出現
+            Transform playerTransform = GameObject.FindWithTag("Player")?.transform;
+            if (playerTransform != null)
+            {
+                partnerObject.transform.position = playerTransform.position + new Vector3(1.5f, 0f, 0f);
+            }
+        }
+        else
+        {
+            // 收回狀態：停用/隱藏 Partner 物件
+            partnerObject.SetActive(false);
+        }
     }
 }
