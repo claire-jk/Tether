@@ -1227,23 +1227,28 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   switchManager: {fileID: 277038069}
-  partnerController: {fileID: 0}
+  partnerController: {fileID: 570418478}
   partnerTransform: {fileID: 570418477}
   moveSpeed: 6
   jumpForce: 12
+  doubleJumpForce: 10
   groundCheck: {fileID: 1550709788}
   groundLayer:
     serializedVersion: 2
     m_Bits: 256
   dashSpeed: 16
+  chargeDashSpeed: 24
   backstepSpeed: 10
   dashDuration: 0.2
+  chargeDashDuration: 0.35
   dashCooldown: 0.8
+  chargeThreshold: 0.4
   attackPoint: {fileID: 1318795996}
   attackRange: 0.8
   enemyLayer:
     serializedVersion: 2
     m_Bits: 0
+  comboForwardImpulse: 2.5
   primaryBulletPrefab: {fileID: 7815667462769890646, guid: 22dbbbd6c4e0fd64aa2c4f37c26e355a, type: 3}
   firePoint: {fileID: 1563900809}
   formationPrefab: {fileID: 5116040381919507593, guid: c28cdab0e347c8742a55c38eb92348a6, type: 3}
