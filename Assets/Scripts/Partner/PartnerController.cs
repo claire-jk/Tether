@@ -42,7 +42,14 @@ public class PartnerController : MonoBehaviour
 
     private void Update()
     {
-        if (switchManager == null || playerTransform == null || isDisabled) return;
+        if (switchManager == null || playerTransform == null) return;
+
+        // 若停機狀態，維持隱藏且不執行 AI 邏輯
+        if (isDisabled)
+        {
+            SetPartnerActive(false);
+            return;
+        }
 
         // 1. 滑鼠游標自動決定面向
         HandleFacing();
@@ -185,7 +192,35 @@ public class PartnerController : MonoBehaviour
 
     #endregion
 
-    #region 血量管理與停機機制
+    #region 血量管理、修復與停機機制
+
+    /// <summary>
+    /// 接收來自主角右鍵功能彈（修復彈）的補血與復原
+    /// </summary>
+    /// <param name="amount">修復量</param>
+    public void RepairHealth(float amount)
+    {
+        if (isDisabled)
+        {
+            // 若處於停機狀態，功能彈可以增加修復進度
+            currentHealth += amount;
+            Debug.Log($"<color=green>[Partner] 停機修復中... 當前進度：{currentHealth}/{maxHealth}</color>");
+
+            // 當修復值滿，自動重新啟動（復原）
+            if (currentHealth >= maxHealth)
+            {
+                currentHealth = maxHealth;
+                isDisabled = false;
+                Debug.Log("<color=green>[Partner] 修復完成，成功重新啟動！</color>");
+            }
+        }
+        else
+        {
+            // 正常狀態下補血（上限為 maxHealth）
+            currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
+            Debug.Log($"<color=green>[Partner] 獲得修復！當前血量：{currentHealth}/{maxHealth}</color>");
+        }
+    }
 
     // 由收回狀態承傷時呼叫
     public void TakeDamage(float amount)

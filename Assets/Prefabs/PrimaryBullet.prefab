@@ -172,3 +172,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Bullet
   speed: 15
   lifeTime: 3
+  isUtilityBullet: 1
+  damage: 10
+  repairAmount: 25

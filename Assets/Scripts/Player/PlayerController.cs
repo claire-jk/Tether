@@ -32,11 +32,15 @@ public class PlayerController : MonoBehaviour
     [Header("遠程彈藥系統")]
     [SerializeField] private GameObject primaryBulletPrefab;  // 普攻彈 Prefab
     [SerializeField] private Transform firePoint;            // 開火點 Transform
-    [SerializeField] private GameObject formationPrefab; // 陣式 Prefab
-    private FormationArea activeFormation;              // 當前場上的陣式實體
+    [SerializeField] private float primaryFireRate = 0.15f;    // 普攻彈連射間隔時間 (秒)
+    [SerializeField] private GameObject formationPrefab;     // 陣式 Prefab
+    private FormationArea activeFormation;                  // 當前場上的陣式實體
+    private bool isPreparingFormation = false;               // 是否處於 R 鍵陣式預預瞄準狀態
+    private float nextPrimaryFireTime = 0f;                  // 普攻彈下次可射擊時間點
 
     [Header("機體資源")]
     [SerializeField] private int maxHealCharges = 3;       // Q 鍵回血最大次數
+    [SerializeField] private float healAmount = 30f;       // 每一次 Q 鍵恢復的血量（可自訂）
     private int currentHealCharges;
 
     [Header("主角血量設定")]
@@ -110,6 +114,8 @@ public class PlayerController : MonoBehaviour
         {
             if (switchManager.currentState == GameControlState.Recalled)
             {
+                // 切換為收回狀態時重置陣式預備
+                isPreparingFormation = false;
                 // 【收回狀態】：近戰體術招式組
                 HandleRecalledCombatInputs();
             }
@@ -119,6 +125,29 @@ public class PlayerController : MonoBehaviour
                 HandleDeployedRangedInputs();
             }
         }
+        /*
+        //測試
+        // 5. 核心：根據 SwitchManager 狀態進行戰鬥輸入分流
+        if (switchManager != null)
+        {
+            if (switchManager.currentState == GameControlState.Recalled)
+            {
+                // 【收回狀態】：近戰體術招式組
+                HandleRecalledCombatInputs();
+            }
+            else
+            {
+                // 【放出狀態】：遠程彈藥系統
+                HandleDeployedRangedInputs();
+            }
+        }
+
+        // --- 【除錯測試用】按下 K 鍵讓玩家扣 15 點血 ---
+        if (Input.GetKeyDown(KeyCode.K))
+        {
+            TakeDamageFromEnemy(15f);
+        }
+        */
     }
 
     private void FixedUpdate()
@@ -319,10 +348,25 @@ public class PlayerController : MonoBehaviour
 
     private void HandleDeployedRangedInputs()
     {
-        // 1. 左鍵單點與 Hold 自動連射
-        if (Input.GetMouseButtonDown(0))
+        // 1. 左鍵處理：若處於陣式預備狀態，點擊左鍵部署陣式；否則支援單點/長按連射
+        if (isPreparingFormation)
         {
-            ShootPrimaryBulletSingle();
+            if (Input.GetMouseButtonDown(0))
+            {
+                DeployFormationToMousePosition();
+            }
+        }
+        else
+        {
+            // 長按 (Hold) 或單點左鍵持續自動連射
+            if (Input.GetMouseButton(0))
+            {
+                if (Time.time >= nextPrimaryFireTime)
+                {
+                    ShootPrimaryBullet();
+                    nextPrimaryFireTime = Time.time + primaryFireRate;
+                }
+            }
         }
 
         // 2. 右鍵功能彈（自動鎖定夥伴方向發射）
@@ -331,14 +375,14 @@ public class PlayerController : MonoBehaviour
             ShootUtilityBulletToPartner();
         }
 
-        // 3. R 鍵陣式彈（預備/部署/取消）
+        // 3. R 鍵陣式彈（預備 / 取消預備 / 手動收回場上陣式）
         if (Input.GetKeyDown(KeyCode.R))
         {
-            ToggleFormationSkill();
+            HandleFormationKey();
         }
     }
 
-    private void ShootPrimaryBulletSingle()
+    private void ShootPrimaryBullet()
     {
         if (primaryBulletPrefab == null || firePoint == null) return;
 
@@ -358,7 +402,7 @@ public class PlayerController : MonoBehaviour
             partnerController.TriggerCoopAttack();
         }
 
-        Debug.Log("<color=green>[Deployed] 左鍵：實體普攻彈發射！</color>");
+        Debug.Log("<color=green>[Deployed] 左鍵：普攻彈發射！</color>");
     }
 
     private void ShootUtilityBulletToPartner()
@@ -383,30 +427,71 @@ public class PlayerController : MonoBehaviour
         Debug.Log($"<color=green>[Deployed] 右鍵：功能彈！自動鎖定夥伴方向發射</color>");
     }
 
-    private void ToggleFormationSkill()
+    private void HandleFormationKey()
     {
-        if (activeFormation == null)
-        {
-            if (formationPrefab == null) return;
-
-            GameObject obj = Instantiate(formationPrefab, transform.position, Quaternion.identity);
-            activeFormation = obj.GetComponent<FormationArea>();
-            Debug.Log("<color=purple>[Deployed] R 鍵：部署陣式！</color>");
-        }
-        else
+        // 狀況 A：場上已有陣式 -> 按 R 手動收回/銷毀
+        if (activeFormation != null)
         {
             activeFormation.RecallFormation();
             activeFormation = null;
-            Debug.Log("<color=purple>[Deployed] R 鍵：手動收回陣式！</color>");
+            isPreparingFormation = false;
+            Debug.Log("<color=purple>[Deployed] R 鍵：手動收回場上陣式！</color>");
+            return;
         }
+
+        // 狀況 B：處於預備狀態 -> 按 R 取消預備
+        if (isPreparingFormation)
+        {
+            isPreparingFormation = false;
+            Debug.Log("<color=yellow>[Deployed] R 鍵：取消陣式預備狀態</color>");
+        }
+        // 狀況 C：尚未預備且場上無陣式 -> 按 R 進入預備狀態
+        else
+        {
+            if (formationPrefab == null)
+            {
+                Debug.LogError("<color=red>[Deployed] 失敗：PlayerController 上的 Formation Prefab 未綁定！</color>");
+                return;
+            }
+            isPreparingFormation = true;
+            Debug.Log("<color=purple>[Deployed] R 鍵：拿出陣式彈！請點擊左鍵指定部署位置</color>");
+        }
+    }
+
+    private void DeployFormationToMousePosition()
+    {
+        if (formationPrefab == null) return;
+
+        // 取得滑鼠在世界座標的位置（將 Z 軸校正為 0）
+        Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        mouseWorldPos.z = 0f;
+
+        // 在滑鼠位置生成陣式
+        GameObject obj = Instantiate(formationPrefab, mouseWorldPos, Quaternion.identity);
+        activeFormation = obj.GetComponent<FormationArea>();
+
+        // 結束預備狀態
+        isPreparingFormation = false;
+        Debug.Log($"<color=purple>[Deployed] 左鍵：成功部署陣式於位置 {mouseWorldPos}！</color>");
     }
 
     private void UseHeal()
     {
+        // 檢查是否有次數，且目前血量尚未補滿
         if (currentHealCharges > 0)
         {
+            if (currentHealth >= maxHealth)
+            {
+                Debug.Log("<color=yellow>[Resource] 主角血量已滿，無法使用回血！</color>");
+                return;
+            }
+
             currentHealCharges--;
-            Debug.Log($"<color=green>[Resource] 主角回血！剩餘次數：{currentHealCharges}/{maxHealCharges}</color>");
+
+            // 增加血量並限制最大值
+            currentHealth = Mathf.Min(maxHealth, currentHealth + healAmount);
+
+            Debug.Log($"<color=green>[Resource] 主角回血 {healAmount} 點！當前血量：{currentHealth}/{maxHealth}，剩餘回血次數：{currentHealCharges}/{maxHealCharges}</color>");
         }
         else
         {
