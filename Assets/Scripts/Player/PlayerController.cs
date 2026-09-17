@@ -33,7 +33,8 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private GameObject primaryBulletPrefab;  // 普攻彈 Prefab
     [SerializeField] private Transform firePoint;            // 開火點 Transform
     [SerializeField] private float primaryFireRate = 0.15f;    // 普攻彈連射間隔時間 (秒)
-    [SerializeField] private float utilityFireRate = 2.0f;     // 【新增企劃需求】右鍵功能彈冷卻時間 (秒)
+    [SerializeField] private float utilityFireRate = 2.0f;     // 右鍵功能彈冷卻時間 (秒)
+    [SerializeField] private Vector3 utilityBulletScale = new Vector3(1.5f, 1.5f, 1f); // 【新增】右鍵功能彈大小 (X, Y, Z)
     [SerializeField] private GameObject formationPrefab;     // 陣式 Prefab
     private FormationArea activeFormation;                   // 當前場上的陣式實體
     private bool isPreparingFormation = false;               // 是否處於 R 鍵陣式預預瞄準狀態
@@ -402,8 +403,8 @@ public class PlayerController : MonoBehaviour
         Bullet bullet = bulletObj.GetComponent<Bullet>();
         if (bullet != null)
         {
-            // 發射功能彈（例：大子彈、青色、傳遞修復/增幅功能）
-            bullet.Initialize(directionToPartner, GetComponent<Collider2D>(), customDamage: 0f, customSpeed: 12f, customScale: new Vector3(1.5f, 1.5f, 1f), isUtility: true);
+            // 將原本寫死的大小改為套用變數 utilityBulletScale
+            bullet.Initialize(directionToPartner, GetComponent<Collider2D>(), customDamage: 0f, customSpeed: 12f, customScale: utilityBulletScale, isUtility: true);
         }
 
         // 觸發 Partner 的協同追擊
