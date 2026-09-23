@@ -11,6 +11,7 @@ public class Bullet : MonoBehaviour
     [SerializeField] private float spawnProtectionTime = 0.15f; // 生成後前 0.15 秒忽略地面碰撞
 
     [Header("彈藥類型與數值")]
+    [Tooltip("勾選此項為右鍵功能彈（修復彈）；不勾選為左鍵普攻彈")]
     [SerializeField] private bool isUtilityBullet = false; // 是否為右鍵功能彈
     [SerializeField] private float damage = 10f;          // 普攻彈傷害值
     [SerializeField] private float repairAmount = 25f;    // 功能彈修復血量值
@@ -106,43 +107,56 @@ public class Bullet : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        // 1. 忽略與其他子彈或玩家本體的碰撞
+        // 1. 忽略與其他子彈、玩家本體、陣勢區域的碰撞
         if (collision.GetComponent<Bullet>() != null) return;
         if (collision.CompareTag("Player")) return;
+        if (collision.GetComponent<FormationArea>() != null) return; // 子彈直接穿過陣勢區域！
 
         // 2. 判斷是否命中 Partner（夥伴）
-        PartnerController partner = collision.GetComponent<PartnerController>();
-        if (partner != null)
+        // 使用 GetComponentInParent 確保就算撞到夥伴子物件的 Collider 也能精準抓到腳本
+        PartnerController partner = collision.GetComponentInParent<PartnerController>();
+        if (partner != null || collision.CompareTag("Partner"))
         {
             if (isUtilityBullet)
             {
-                partner.RepairHealth(repairAmount);
-                Debug.Log($"<color=cyan>[Bullet] 功能彈成功修復 Partner ({repairAmount} 點血量)！</color>");
+                // 【功能彈】：觸發夥伴修復，並銷毀子彈
+                if (partner != null)
+                {
+                    partner.RepairHealth(repairAmount);
+                    Debug.Log($"<color=cyan>[Bullet] 功能彈成功修復 Partner ({repairAmount} 點血量)！</color>");
+                }
                 Destroy(gameObject);
                 return;
             }
             else
             {
-                return; // 普攻彈穿透夥伴
+                // 【普攻彈】：直接穿越夥伴，不做任何處理也不銷毀！
+                Debug.Log("<color=grey>[Bullet] 普攻彈穿透夥伴！</color>");
+                return;
             }
         }
 
-        // 3. 判斷是否命中敵人
-        if (collision.CompareTag("Enemy"))
+        // 3. 判斷是否命中敵人或 Boss
+        if (collision.CompareTag("Enemy") || collision.CompareTag("Boss"))
         {
-            Debug.Log($"<color=red>[Bullet] 子彈命中敵人：{collision.name}，造成 {damage} 點傷害！</color>");
+            // 普攻彈與功能彈打到敵人皆進行處置（若功能彈不該打敵人可另外加條件）
+            Debug.Log($"<color=red>[Bullet] 子彈命中敵人/Boss：{collision.name}，造成 {damage} 點傷害！</color>");
+
+            // 如果敵人有 TakeDamage 相關組件可在此呼叫：
+            // collision.GetComponentInParent<BossController>()?.TakeDamage(damage);
+
             Destroy(gameObject);
             return;
         }
 
-        // 4. 【核心修復】：如果在生成保護時間內撞到地面/牆壁，忽略該次碰撞！
+        // 4. 防卡地保護時間檢查
         if (Time.time - spawnTime < spawnProtectionTime)
         {
             return;
         }
 
-        // 5. 超過保護時間後，正常擊中場景牆壁、障礙物等其他物件才銷毀
-        Debug.Log($"<color=yellow>[Bullet] 子彈擊中物件：{collision.name}</color>");
+        // 5. 超過保護時間後，擊中牆壁、地面等其他障礙物才銷毀
+        Debug.Log($"<color=yellow>[Bullet] 子彈擊中障礙物：{collision.name}</color>");
         Destroy(gameObject);
     }
 }

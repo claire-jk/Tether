@@ -16,13 +16,16 @@ public class PartnerController : MonoBehaviour
     [SerializeField] private float attackInterval = 1f;  // AI 自動攻擊間隔
     private float nextAttackTime;
 
-    [Header("登場衝刺設定")]
+    [Header("登場與收回衝刺設定")]
     [Tooltip("剛被 E 鍵放出時衝向 Boss 的超高速")]
     [SerializeField] private float rushSpeed = 25f;        // 登場極速衝刺速度
     [Tooltip("登場衝刺的最長持續時間（秒）")]
     [SerializeField] private float rushDuration = 0.5f;     // 衝刺持續時間
+    [SerializeField] private float recallSpeed = 30f;       // 收回時飛回主角的速度
+
     private float rushTimer = 0f;                          // 衝刺計時器
     private bool isRushing = false;                        // 是否正在衝刺狀態
+    private bool isRecalling = false;                      // 【關鍵】是否正在高速飛回主角身邊
 
     [Header("血量與停機規則")]
     [SerializeField] private float maxHealth = 100f;
@@ -62,9 +65,23 @@ public class PartnerController : MonoBehaviour
         if (bossTransform != null && !isDisabled)
         {
             isRushing = true;
+            isRecalling = false; // 確保放出時重置收回狀態
             rushTimer = rushDuration;
             Debug.Log("<color=orange>[Partner AI] 登場！發動超高速突進衝向 Boss！</color>");
         }
+    }
+
+    /// <summary>
+    /// 【新增】：由 SwitchManager 在按下 E 收回時呼叫，觸發飛回動畫
+    /// </summary>
+    public void StartRecalling()
+    {
+        if (isDisabled) return;
+
+        isRecalling = true;
+        isRushing = false;
+        SetPartnerActive(true); // 確保飛回期間是顯示狀態
+        Debug.Log("<color=cyan>[Partner AI] 開始飛回主角身邊...</color>");
     }
 
     private void Update()
@@ -84,6 +101,7 @@ public class PartnerController : MonoBehaviour
         // 2. 根據 SwitchManager 狀態切換顯示與 AI 行為
         if (switchManager.currentState == GameControlState.Deployed)
         {
+            isRecalling = false; // 若在中途再次切換為放出，立刻打斷收回
             SetPartnerActive(true);
 
             // 放出狀態：優先衝向 Boss 攻擊，若無視野目標則回歸平滑懸浮跟隨
@@ -98,10 +116,46 @@ public class PartnerController : MonoBehaviour
         }
         else
         {
-            // 收回狀態：隱藏夥伴並重置位置至主角本體，同時終止衝刺
+            // 收回狀態：
             isRushing = false;
+
+            if (isRecalling)
+            {
+                // 【核心修復】：如果正處於收回狀態，平滑飛向主角
+                HandleRecallMovement();
+            }
+            else
+            {
+                // 已飛抵身邊，維持隱藏並重置位置
+                SetPartnerActive(false);
+                transform.position = playerTransform.position;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 【新增】：處理飛回主角身邊的高速移動
+    /// </summary>
+    private void HandleRecallMovement()
+    {
+        // 飛向主角身邊的預設懸浮點
+        Vector3 targetOffset = followOffset;
+        if (playerTransform.localScale.x < 0)
+        {
+            targetOffset.x = -followOffset.x;
+        }
+        Vector3 targetPosition = playerTransform.position + targetOffset;
+
+        // 使用 MoveTowards 以固定高速度 (recallSpeed) 朝主角飛去
+        transform.position = Vector3.MoveTowards(transform.position, targetPosition, recallSpeed * Time.deltaTime);
+
+        // 當距離極近時，代表已抵達主角身邊，正式完成收回並隱藏
+        if (Vector3.Distance(transform.position, targetPosition) < 0.2f)
+        {
+            isRecalling = false;
             SetPartnerActive(false);
             transform.position = playerTransform.position;
+            Debug.Log("<color=cyan>[Partner AI] 成功飛回主角身邊並隱藏！</color>");
         }
     }
 
@@ -126,7 +180,7 @@ public class PartnerController : MonoBehaviour
         // 只計算水平 X 軸距離
         float distanceX = Mathf.Abs(transform.position.x - bossTransform.position.x);
 
-        // 【新增】：優先處理登場高速衝刺
+        // 優先處理登場高速衝刺
         if (isRushing)
         {
             rushTimer -= Time.deltaTime;
@@ -236,8 +290,8 @@ public class PartnerController : MonoBehaviour
         }
 
         // 2. 收招/折返 phase (剩餘時間)
-        elapsed = 0f;
         float returnTime = duration * 0.6f;
+        elapsed = 0f;
         while (elapsed < returnTime)
         {
             transform.position = Vector3.Lerp(targetPos, startPos, elapsed / returnTime);
@@ -253,19 +307,13 @@ public class PartnerController : MonoBehaviour
 
     #region 血量管理、修復與停機機制
 
-    /// <summary>
-    /// 接收來自主角右鍵功能彈（修復彈）的補血與復原
-    /// </summary>
-    /// <param name="amount">修復量</param>
     public void RepairHealth(float amount)
     {
         if (isDisabled)
         {
-            // 若處於停機狀態，功能彈可以增加修復進度
             currentHealth += amount;
             Debug.Log($"<color=green>[Partner] 停機修復中... 當前進度：{currentHealth}/{maxHealth}</color>");
 
-            // 當修復值滿，自動重新啟動（復原）
             if (currentHealth >= maxHealth)
             {
                 currentHealth = maxHealth;
@@ -275,13 +323,11 @@ public class PartnerController : MonoBehaviour
         }
         else
         {
-            // 正常狀態下補血（上限為 maxHealth）
             currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
             Debug.Log($"<color=green>[Partner] 獲得修復！當前血量：{currentHealth}/{maxHealth}</color>");
         }
     }
 
-    // 由收回狀態承傷時呼叫
     public void TakeDamage(float amount)
     {
         if (isDisabled) return;

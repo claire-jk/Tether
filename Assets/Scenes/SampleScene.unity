@@ -1006,6 +1006,9 @@ MonoBehaviour:
   aiMoveSpeed: 5
   attackRange: 1.5
   attackInterval: 1
+  rushSpeed: 25
+  rushDuration: 0.5
+  recallSpeed: 30
   maxHealth: 100
 --- !u!1 &588982933
 GameObject:
@@ -1918,6 +1921,7 @@ MonoBehaviour:
     m_Bits: 0
   comboForwardImpulse: 2.5
   primaryBulletPrefab: {fileID: 7815667462769890646, guid: 22dbbbd6c4e0fd64aa2c4f37c26e355a, type: 3}
+  utilityBulletPrefab: {fileID: 7815667462769890646, guid: 0ed785f2b7f896646ac2c7ca879efdbb, type: 3}
   firePoint: {fileID: 1563900809}
   primaryFireRate: 0.15
   utilityFireRate: 2

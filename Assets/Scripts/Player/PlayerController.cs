@@ -30,16 +30,16 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float comboForwardImpulse = 2.5f; // 普通棺槨擊打時的小幅前衝力
 
     [Header("遠程彈藥系統")]
-    [SerializeField] private GameObject primaryBulletPrefab;  // 普攻彈 Prefab
+    [SerializeField] private GameObject primaryBulletPrefab;  // 普攻彈 Prefab (PrimaryBullet)
+    [SerializeField] private GameObject utilityBulletPrefab;  // 功能彈 Prefab (UtilityBullet)
     [SerializeField] private Transform firePoint;            // 開火點 Transform
     [SerializeField] private float primaryFireRate = 0.15f;    // 普攻彈連射間隔時間 (秒)
     [SerializeField] private float utilityFireRate = 2.0f;     // 右鍵功能彈冷卻時間 (秒)
-    [SerializeField] private Vector3 utilityBulletScale = new Vector3(1.5f, 1.5f, 1f); // 【新增】右鍵功能彈大小 (X, Y, Z)
     [SerializeField] private GameObject formationPrefab;     // 陣式 Prefab
-    private FormationArea activeFormation;                   // 當前場上的陣式實體
-    private bool isPreparingFormation = false;               // 是否處於 R 鍵陣式預預瞄準狀態
+    private FormationArea activeFormation;                    // 當前場上的陣式實體
+    private bool isPreparingFormation = false;                // 是否處於 R 鍵陣式預預瞄準狀態
     private float nextPrimaryFireTime = 0f;                  // 普攻彈下次可射擊時間點
-    private float nextUtilityFireTime = 0f;                  // 【新增】功能彈下次可射擊時間點
+    private float nextUtilityFireTime = 0f;                  // 功能彈下次可射擊時間點
 
     [Header("機體資源")]
     [SerializeField] private int maxHealCharges = 3;       // Q 鍵回血最大次數
@@ -215,10 +215,9 @@ public class PlayerController : MonoBehaviour
 
     private void HandleRecalledCombatInputs()
     {
-        // 若夥伴停機，體術招式依然可進行本體攻擊，但輸出/位移效果受限
         if (partnerController != null && partnerController.IsDisabled)
         {
-            // 可在此選擇性降低傷害或停用特殊噴射技巧
+            // 夥伴停機時的限制邏輯
         }
 
         // 連招超時未按，自動重置回第一擊
@@ -254,17 +253,14 @@ public class PlayerController : MonoBehaviour
         {
             if (Input.GetKey(KeyCode.W))
             {
-                // W + 左鍵：上跳攻擊（斜上前方，含位移，可銜接二段跳）
                 PerformUpwardAttack();
             }
             else if (!isGrounded && Input.GetKey(KeyCode.S))
             {
-                // 空中 S + 左鍵：下壓攻擊
                 PerformDownwardAttack();
             }
             else
             {
-                // 橫向普攻（棺槨四段擊，帶微幅前衝 DashA/D）
                 PerformNormalMeleeAttack();
             }
         }
@@ -273,11 +269,7 @@ public class PlayerController : MonoBehaviour
     private void PerformUpwardAttack()
     {
         float facingDir = isFacingRight ? 1f : -1f;
-
-        // 設定斜上方衝量
         rb.linearVelocity = new Vector2(facingDir * 8f, jumpForce * 0.95f);
-
-        // 給予 0.15 秒物理保護展現斜上躍擊
         attackMoveTimer = 0.15f;
 
         Debug.Log("<color=red>[Recalled] 觸發：W + 左鍵 上跳攻擊！（空中可再接二段跳）</color>");
@@ -286,7 +278,6 @@ public class PlayerController : MonoBehaviour
 
     private void PerformDownwardAttack()
     {
-        // 給予向下快速壓制強烈位移
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, -jumpForce * 1.4f);
         attackMoveTimer = 0.2f;
 
@@ -299,10 +290,8 @@ public class PlayerController : MonoBehaviour
         lastComboTime = Time.time;
         comboStep++;
 
-        // 限制最高為第 4 段，打完第 4 段後重置
         if (comboStep > 4) comboStep = 1;
 
-        // 棺槨四段擊附帶微幅前衝（Dash A/D 概念）
         float facingDir = isFacingRight ? 1f : -1f;
         rb.linearVelocity = new Vector2(facingDir * comboForwardImpulse * comboStep, rb.linearVelocity.y);
 
@@ -318,7 +307,6 @@ public class PlayerController : MonoBehaviour
         foreach (Collider2D enemy in hitEnemies)
         {
             Debug.Log($"<color=yellow>[Hit!] {attackName} 命中目標：{enemy.name} (倍率: {damageMultiplier})</color>");
-            // 未來在此呼叫敵人的 TakeDamage()
         }
     }
 
@@ -328,7 +316,7 @@ public class PlayerController : MonoBehaviour
 
     private void HandleDeployedRangedInputs()
     {
-        // 1. 左鍵處理：若處於陣式預備狀態，點擊左鍵部署陣式；否則支援單點/長按連射
+        // 1. 左鍵處理：部署陣式或普攻彈連射
         if (isPreparingFormation)
         {
             if (Input.GetMouseButtonDown(0))
@@ -338,7 +326,6 @@ public class PlayerController : MonoBehaviour
         }
         else
         {
-            // 長按 (Hold) 或單點左鍵持續自動連射
             if (Input.GetMouseButton(0))
             {
                 if (Time.time >= nextPrimaryFireTime)
@@ -363,7 +350,7 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // 3. R 鍵陣式彈（預備 / 取消預備 / 手動收回場上陣式）
+        // 3. R 鍵陣式彈
         if (Input.GetKeyDown(KeyCode.R))
         {
             HandleFormationKey();
@@ -377,6 +364,7 @@ public class PlayerController : MonoBehaviour
         Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         Vector2 fireDirection = (mousePos - firePoint.position).normalized;
 
+        // 生成普攻彈 Prefab
         GameObject bulletObj = Instantiate(primaryBulletPrefab, firePoint.position, Quaternion.identity);
         Bullet bullet = bulletObj.GetComponent<Bullet>();
         if (bullet != null)
@@ -395,16 +383,18 @@ public class PlayerController : MonoBehaviour
 
     private void ShootUtilityBulletToPartner()
     {
-        if (primaryBulletPrefab == null || firePoint == null || partnerTransform == null) return;
+        //【修改點】：將檢查條件改為 utilityBulletPrefab
+        if (utilityBulletPrefab == null || firePoint == null || partnerTransform == null) return;
 
         Vector2 directionToPartner = (partnerTransform.position - firePoint.position).normalized;
 
-        GameObject bulletObj = Instantiate(primaryBulletPrefab, firePoint.position, Quaternion.identity);
+        //【修改點】：直接生成 utilityBulletPrefab
+        GameObject bulletObj = Instantiate(utilityBulletPrefab, firePoint.position, Quaternion.identity);
         Bullet bullet = bulletObj.GetComponent<Bullet>();
         if (bullet != null)
         {
-            // 將原本寫死的大小改為套用變數 utilityBulletScale
-            bullet.Initialize(directionToPartner, GetComponent<Collider2D>(), customDamage: 0f, customSpeed: 12f, customScale: utilityBulletScale, isUtility: true);
+            //【修改點】：調用基礎初始化即可（Prefab 上已設定好 Is Utility Bullet = true）
+            bullet.Initialize(directionToPartner, GetComponent<Collider2D>());
         }
 
         // 觸發 Partner 的協同追擊
@@ -413,12 +403,11 @@ public class PlayerController : MonoBehaviour
             partnerController.TriggerCoopAttack();
         }
 
-        Debug.Log($"<color=green>[Deployed] 右鍵：功能彈！自動鎖定夥伴方向發射</color>");
+        Debug.Log($"<color=cyan>[Deployed] 右鍵：功能彈！自動鎖定夥伴方向發射</color>");
     }
 
     private void HandleFormationKey()
     {
-        // 狀況 A：場上已有陣式 -> 按 R 手動收回/銷毀
         if (activeFormation != null)
         {
             activeFormation.RecallFormation();
@@ -428,13 +417,11 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        // 狀況 B：處於預備狀態 -> 按 R 取消預備
         if (isPreparingFormation)
         {
             isPreparingFormation = false;
             Debug.Log("<color=yellow>[Deployed] R 鍵：取消陣式預備狀態</color>");
         }
-        // 狀況 C：尚未預備且場上無陣式 -> 按 R 進入預備狀態
         else
         {
             if (formationPrefab == null)
@@ -451,22 +438,18 @@ public class PlayerController : MonoBehaviour
     {
         if (formationPrefab == null) return;
 
-        // 取得滑鼠在世界座標的位置（將 Z 軸校正為 0）
         Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         mouseWorldPos.z = 0f;
 
-        // 在滑鼠位置生成陣式
         GameObject obj = Instantiate(formationPrefab, mouseWorldPos, Quaternion.identity);
         activeFormation = obj.GetComponent<FormationArea>();
 
-        // 結束預備狀態
         isPreparingFormation = false;
         Debug.Log($"<color=purple>[Deployed] 左鍵：成功部署陣式於位置 {mouseWorldPos}！</color>");
     }
 
     private void UseHeal()
     {
-        // 檢查是否有次數，且目前血量尚未補滿
         if (currentHealCharges > 0)
         {
             if (currentHealth >= maxHealth)
@@ -476,8 +459,6 @@ public class PlayerController : MonoBehaviour
             }
 
             currentHealCharges--;
-
-            // 增加血量並限制最大值
             currentHealth = Mathf.Min(maxHealth, currentHealth + healAmount);
 
             Debug.Log($"<color=green>[Resource] 主角回血 {healAmount} 點！當前血量：{currentHealth}/{maxHealth}，剩餘回血次數：{currentHealCharges}/{maxHealCharges}</color>");
@@ -503,7 +484,6 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // 當在放出狀態，或夥伴已停機時，由主角本體扣血
         currentHealth = Mathf.Max(0f, currentHealth - damage);
         Debug.Log($"<color=red>[Player] 主角受到傷害：{damage}，剩餘血量：{currentHealth}/{maxHealth}</color>");
     }

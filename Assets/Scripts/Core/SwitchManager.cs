@@ -35,8 +35,11 @@ public class SwitchManager : MonoBehaviour
 
     private void Start()
     {
-        // 遊戲啟動時根據初始狀態初始化夥伴的顯示與隱藏
-        UpdatePartnerVisibility();
+        // 遊戲啟動時若為收回狀態，先將夥伴直接隱藏
+        if (partnerObject != null && currentState == GameControlState.Recalled)
+        {
+            partnerObject.SetActive(false);
+        }
     }
 
     private void Update()
@@ -100,22 +103,33 @@ public class SwitchManager : MonoBehaviour
             return;
         }
 
+        PartnerController partnerCtrl = partnerObject.GetComponent<PartnerController>();
+
         if (currentState == GameControlState.Deployed)
         {
-            // 放出狀態：啟用 Partner 物件
-            partnerObject.SetActive(true);
-
-            // 將 Partner 移至玩家身側，避免從舊位置遠距離憑空出現
+            // 放出狀態：
+            // 1. 將 Partner 重置移至主角身側，確保每次都從主角身邊出發
             Transform playerTransform = GameObject.FindWithTag("Player")?.transform;
             if (playerTransform != null)
             {
-                partnerObject.transform.position = playerTransform.position + new Vector3(1.5f, 0f, 0f);
+                partnerObject.transform.position = playerTransform.position + new Vector3(-1.5f, 1f, 0f);
             }
+
+            // 2. 啟用 Partner 物件（會觸發 PartnerController 的 OnEnable 發動登場突進）
+            partnerObject.SetActive(true);
         }
         else
         {
-            // 收回狀態：停用/隱藏 Partner 物件
-            partnerObject.SetActive(false);
+            // 【核心修改】收回狀態：
+            // 不再直接 SetActive(false)，而是通知 PartnerController 觸發飛回主角的動畫
+            if (partnerCtrl != null)
+            {
+                partnerCtrl.StartRecalling();
+            }
+            else
+            {
+                partnerObject.SetActive(false);
+            }
         }
     }
 }
