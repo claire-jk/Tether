@@ -24,8 +24,8 @@ public class PartnerController : MonoBehaviour
     [SerializeField] private float recallSpeed = 30f;       // 收回時飛回主角的速度
 
     private float rushTimer = 0f;                           // 衝刺計時器
-    private bool isRushing = false;                        // 是否正在衝刺狀態
-    private bool isRecalling = false;                      // 是否正在高速飛回主角身邊
+    private bool isRushing = false;                         // 是否正在衝刺狀態
+    private bool isRecalling = false;                       // 是否正在高速飛回主角身邊
 
     // ==========================================
     // Parry 招架機制參數
@@ -37,8 +37,9 @@ public class PartnerController : MonoBehaviour
 
     [Header("血量與停機規則")]
     [SerializeField] private float maxHealth = 100f;
-    private float currentHealth;
-    private bool isDisabled = false; // 是否停機
+    [SerializeField] private float currentHealth;
+    [SerializeField] private bool isDisabled = false;
+    private bool isInvincible = false; // 1f 無敵幀標籤
 
     private SpriteRenderer spriteRenderer;
     private Collider2D partnerCollider;
@@ -170,6 +171,9 @@ public class PartnerController : MonoBehaviour
         {
             isRushing = false;
 
+            // 收回 (Recalled) 狀態下且未停機，進行每影格 2% 回血
+            HandleRecalledRegen();
+
             if (isRecalling)
             {
                 HandleRecallMovement();
@@ -184,6 +188,20 @@ public class PartnerController : MonoBehaviour
             }
         }
     }
+
+    #region 收回狀態自然回血 (2%/f)
+
+    private void HandleRecalledRegen()
+    {
+        if (currentHealth < maxHealth && !isDisabled)
+        {
+            // 每影格增加 MaxHealth 的 2%
+            float regenAmount = maxHealth * 0.02f;
+            currentHealth = Mathf.Min(maxHealth, currentHealth + regenAmount);
+        }
+    }
+
+    #endregion
 
     private void HandleRecallMovement()
     {
@@ -356,6 +374,7 @@ public class PartnerController : MonoBehaviour
             {
                 currentHealth = maxHealth;
                 isDisabled = false;
+                if (spriteRenderer != null) spriteRenderer.color = Color.white;
                 Debug.Log("<color=green>[Partner] 修復完成，成功重新啟動！</color>");
             }
         }
@@ -368,15 +387,23 @@ public class PartnerController : MonoBehaviour
 
     public void TakeDamage(float amount)
     {
-        if (isDisabled) return;
+        // 停機中或處於 1f 無敵幀時不受傷害
+        if (isDisabled || isInvincible) return;
 
+        // 檢查 Parry
         if (CheckParrySuccess(null, amount))
         {
             return;
         }
 
-        currentHealth -= amount;
-        Debug.Log($"<color=yellow>[Partner] 扣除夥伴血量：{amount}，剩餘：{currentHealth}/{maxHealth}</color>");
+        // 1. 企劃需求：夥伴只承擔 10% 傷害
+        float actualDamage = amount * 0.1f;
+        currentHealth = Mathf.Max(0f, currentHealth - actualDamage);
+
+        Debug.Log($"<color=yellow>[Partner] 扣除夥伴血量（已套用 10% 減傷）：{actualDamage}，剩餘：{currentHealth}/{maxHealth}</color>");
+
+        // 2. 觸發 1 影格無敵幀
+        StartCoroutine(TriggerInvincibilityFrame());
 
         if (currentHealth <= 0f)
         {
@@ -384,11 +411,31 @@ public class PartnerController : MonoBehaviour
         }
     }
 
+    private IEnumerator TriggerInvincibilityFrame()
+    {
+        isInvincible = true;
+        yield return new WaitForEndOfFrame();
+        isInvincible = false;
+    }
+
     private void DisablePartner()
     {
         isDisabled = true;
         currentHealth = 0f;
+
+        if (spriteRenderer != null)
+        {
+            spriteRenderer.color = Color.gray; // 停機視覺變灰
+        }
+
         SetPartnerActive(false);
+
+        // 若停機時為 Deployed 狀態，自動切換回 Recalled
+        if (switchManager != null && switchManager.currentState == GameControlState.Deployed)
+        {
+            switchManager.ToggleState();
+        }
+
         Debug.Log("<color=red>[Partner] 血量歸零，夥伴停機！</color>");
     }
 

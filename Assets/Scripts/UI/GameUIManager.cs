@@ -4,45 +4,69 @@ using UnityEngine.UI;
 public class GameUIManager : MonoBehaviour
 {
     [Header("核心引用")]
+    [SerializeField] private SwitchManager switchManager;
     [SerializeField] private PartnerController partnerController;
     [SerializeField] private PlayerController playerController;
 
-    [Header("UI 組件")]
-    [SerializeField] private Slider partnerHPSlider;
-    [SerializeField] private Slider playerHPSlider;
-    [SerializeField] private Image partnerFillImage;
+    [Header("UI 組件（單一主要血條機制）")]
+    [Tooltip("主要血條 Slider（放出的時候顯示夥伴血量，收回的時候顯示主角血量）")]
+    [SerializeField] private Slider mainHPSlider;
+    [SerializeField] private Image mainFillImage;
 
     [Header("顏色設定")]
-    [SerializeField] private Color normalColor = Color.cyan;
-    [SerializeField] private Color disabledColor = Color.gray;
+    [SerializeField] private Color playerHPColor = Color.green;   // 主角血條顏色
+    [SerializeField] private Color partnerHPColor = Color.cyan;    // 夥伴正常血條顏色
+    [SerializeField] private Color disabledColor = Color.gray;     // 夥伴停機血條顏色
 
-    private void Update()
+    private void Awake()
     {
-        UpdatePartnerHealthUI();
-        UpdatePlayerHealthUI();
-    }
-
-    private void UpdatePartnerHealthUI()
-    {
-        if (partnerController == null || partnerHPSlider == null) return;
-
-        // 更新夥伴 Slider 數值
-        partnerHPSlider.maxValue = partnerController.MaxHealth;
-        partnerHPSlider.value = partnerController.CurrentHealth;
-
-        // 停機時視覺變灰
-        if (partnerFillImage != null)
+        // 自動防呆：若未設定 switchManager，嘗試從場景搜尋
+        if (switchManager == null)
         {
-            partnerFillImage.color = partnerController.IsDisabled ? disabledColor : normalColor;
+            switchManager = FindAnyObjectByType<SwitchManager>(); // ✅ 使用最新推薦方法
         }
     }
 
-    private void UpdatePlayerHealthUI()
+    private void Update()
     {
-        if (playerController == null || playerHPSlider == null) return;
+        UpdateDynamicHealthUI();
+    }
 
-        // 更新主角 Slider 數值（需確保 PlayerController 有對應屬性）
-        playerHPSlider.maxValue = playerController.MaxHealth;
-        playerHPSlider.value = playerController.CurrentHealth;
+    /// <summary>
+    /// 根據當前切換狀態（Deployed / Recalled）切換主要血條顯示
+    /// </summary>
+    private void UpdateDynamicHealthUI()
+    {
+        if (mainHPSlider == null || switchManager == null) return;
+
+        // 1. 放出狀態 (Deployed) -> 主要血條顯示夥伴血量
+        if (switchManager.currentState == GameControlState.Deployed)
+        {
+            if (partnerController != null)
+            {
+                mainHPSlider.maxValue = partnerController.MaxHealth;
+                mainHPSlider.value = partnerController.CurrentHealth;
+
+                if (mainFillImage != null)
+                {
+                    // 停機時血條變灰，正常時顯示夥伴顏色
+                    mainFillImage.color = partnerController.IsDisabled ? disabledColor : partnerHPColor;
+                }
+            }
+        }
+        // 2. 收回狀態 (Recalled) -> 主要血條顯示主角血量
+        else
+        {
+            if (playerController != null)
+            {
+                mainHPSlider.maxValue = playerController.MaxHealth;
+                mainHPSlider.value = playerController.CurrentHealth;
+
+                if (mainFillImage != null)
+                {
+                    mainFillImage.color = playerHPColor;
+                }
+            }
+        }
     }
 }

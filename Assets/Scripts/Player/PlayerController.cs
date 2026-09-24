@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 public class PlayerController : MonoBehaviour
@@ -52,20 +53,26 @@ public class PlayerController : MonoBehaviour
 
     [Header("機體資源與血量")]
     [SerializeField] private int maxHealCharges = 3;
-    [SerializeField] private float healAmount = 30f;
     [SerializeField] private float maxHealth = 100f;
+
+    [SerializeField] private float currentHealth;
 
     [Header("Parry & 投擲拋物線參數")]
     [SerializeField] private TrajectoryLine trajectoryLine; // 引用拋物線
     [SerializeField] private float throwForce = 18f;        // 投擲初始速度
     [SerializeField] private float partnerGravityScale = 1f; // 夥伴投擲時的重力係數
-    [SerializeField] private KeyCode parryKey = KeyCode.F;   // 【新增】：Parry 按鍵定義 (預設 F 鍵)
-    private bool isAimingThrow = false;                     // 【新增】：記錄是否正在按住右鍵瞄準投擲
+    [SerializeField] private KeyCode parryKey = KeyCode.F;   // Parry 按鍵定義 (預設 F 鍵)
+    private bool isAimingThrow = false;                     // 記錄是否正在按住右鍵瞄準投擲
+
+    // 血量與喝水狀態變數
     private int currentHealCharges;
-    private float currentHealth;
+    private bool isDead = false;
+    private bool isHealing = false;                          // 是否正在喝水讀條中
+    private Coroutine healCoroutine;                         // 喝水協程引用 (用於中斷)
 
     public float MaxHealth => maxHealth;
     public float CurrentHealth => currentHealth;
+    public bool IsDead => isDead;
 
     // 內部物理與狀態變數
     private Rigidbody2D rb;
@@ -101,6 +108,9 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        // 死亡時禁止所有操作
+        if (isDead) return;
+
         if (isDashing)
         {
             dashTimer -= Time.deltaTime;
@@ -140,13 +150,22 @@ public class PlayerController : MonoBehaviour
         // 4. 觸發跳躍邏輯
         HandleJumping();
 
-        // 5. Q 鍵回血
+        // 5. Q 鍵觸發喝水
         if (Input.GetKeyDown(KeyCode.Q))
         {
-            UseHeal();
+            TryStartHeal();
         }
 
-        // 6. 根據狀態分流戰鬥輸入
+        // 6. 喝水讀條期間的中斷檢測 (移動或攻擊中斷)
+        if (isHealing)
+        {
+            if (Mathf.Abs(Input.GetAxisRaw("Horizontal")) > 0.1f || Input.GetMouseButtonDown(0))
+            {
+                CancelHeal();
+            }
+        }
+
+        // 7. 根據狀態分流戰鬥輸入
         if (switchManager != null)
         {
             if (switchManager.currentState == GameControlState.Recalled)
@@ -166,7 +185,7 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // 【新增】：如果在 Recalled 狀態且正在右鍵瞄準投擲，即時更新繪製拋物線
+        // 如果在 Recalled 狀態且正在右鍵瞄準投擲，即時更新繪製拋物線
         if (isAimingThrow)
         {
             UpdateThrowTrajectory();
@@ -175,6 +194,8 @@ public class PlayerController : MonoBehaviour
 
     private void FixedUpdate()
     {
+        if (isDead) return;
+
         if (isDashing)
         {
             rb.linearVelocity = new Vector2(dashDirection * currentActiveDashSpeed, 0f);
@@ -325,17 +346,13 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // ==========================================
-        // 【新增】：Parry 按鍵觸發 (F 鍵)
-        // ==========================================
+        // Parry 按鍵觸發 (F 鍵)
         if (Input.GetKeyDown(parryKey))
         {
             PerformParry();
         }
 
-        // ==========================================
-        // 【新增】：長按右鍵預覽投擲拋物線，放開時丟出夥伴
-        // ==========================================
+        // 長按右鍵預覽投擲拋物線，放開時丟出夥伴
         if (Input.GetMouseButtonDown(1))
         {
             isAimingThrow = true;
@@ -388,9 +405,6 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // ==========================================
-    // 【新增】：Parry 與 投擲夥伴 邏輯實作
-    // ==========================================
     private void PerformParry()
     {
         if (partnerController != null && !partnerController.IsDisabled)
@@ -536,31 +550,94 @@ public class PlayerController : MonoBehaviour
         isPreparingFormation = false;
     }
 
-    private void UseHeal()
+    #endregion
+
+    #region 受到攻擊、死亡與喝水自我治療
+
+    /// <summary>
+    /// 敵人命中主角時呼叫此方法
+    /// </summary>
+    public void TakeDamageFromEnemy(float damage)
     {
-        if (currentHealCharges > 0 && currentHealth < maxHealth)
+        if (isDead) return;
+
+        // 受到攻擊時中斷喝水
+        if (isHealing)
         {
-            currentHealCharges--;
-            currentHealth = Mathf.Min(maxHealth, currentHealth + healAmount);
+            CancelHeal();
         }
+
+        // 直接扣除主角本身的血量
+        currentHealth = Mathf.Max(0f, currentHealth - damage);
+        Debug.Log($"<color=orange>[Player] 主角受到 {damage} 點傷害，剩餘血量：{currentHealth}</color>");
+
+        // 判定死亡
+        if (currentHealth <= 0f)
+        {
+            Die();
+        }
+    }
+
+    private void Die()
+    {
+        isDead = true;
+        Debug.Log("<color=red>[Player] 主角血量歸零，觸發死亡！</color>");
+        // TODO: 可在此處加入死亡動畫、音效或 Game Over 畫面觸發
+    }
+
+    private void TryStartHeal()
+    {
+        if (currentHealCharges <= 0)
+        {
+            Debug.Log("[Player] 治療藥水已用盡！");
+            return;
+        }
+
+        if (currentHealth >= maxHealth)
+        {
+            Debug.Log("[Player] 血量已滿，無需治療！");
+            return;
+        }
+
+        if (isHealing) return; // 已在讀條中
+
+        healCoroutine = StartCoroutine(HealRoutine());
+    }
+
+    private IEnumerator HealRoutine()
+    {
+        isHealing = true;
+        Debug.Log("[Player] 開始喝水讀條 (2f)...");
+
+        // 等待 2 個影格 (2 Frames)
+        yield return new WaitForEndOfFrame();
+        yield return new WaitForEndOfFrame();
+
+        // 讀條順利完成，扣除次數並恢復 40% 最大生命值
+        currentHealCharges--;
+        float actualHealAmount = maxHealth * 0.4f;
+        currentHealth = Mathf.Min(maxHealth, currentHealth + actualHealAmount);
+
+        Debug.Log($"<color=green>[Player] 喝水完成！恢復 {actualHealAmount} HP，當前血量：{currentHealth}，剩餘藥水：{currentHealCharges}</color>");
+
+        isHealing = false;
+        healCoroutine = null;
+    }
+
+    private void CancelHeal()
+    {
+        if (healCoroutine != null)
+        {
+            StopCoroutine(healCoroutine);
+            healCoroutine = null;
+        }
+        isHealing = false;
+        Debug.Log("<color=yellow>[Player] 喝水動作被中斷！</color>");
     }
 
     #endregion
 
     #region 通用與 Gizmos
-
-    public void TakeDamageFromEnemy(float damage)
-    {
-        if (switchManager != null && switchManager.currentState == GameControlState.Recalled)
-        {
-            if (partnerController != null && !partnerController.IsDisabled)
-            {
-                partnerController.TakeDamage(damage);
-                return;
-            }
-        }
-        currentHealth = Mathf.Max(0f, currentHealth - damage);
-    }
 
     private void HandleFacing()
     {

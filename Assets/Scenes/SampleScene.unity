@@ -732,7 +732,7 @@ RectTransform:
   m_Father: {fileID: 1073629407}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 10, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -1230,6 +1230,8 @@ MonoBehaviour:
   recallSpeed: 30
   parryWindowDuration: 0.3
   maxHealth: 100
+  currentHealth: 0
+  isDisabled: 0
 --- !u!1 &588982933
 GameObject:
   m_ObjectHideFlags: 0
@@ -2012,12 +2014,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e7971b3634988ba4e8002dc00a9a4bfd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameUIManager
+  switchManager: {fileID: 277038069}
   partnerController: {fileID: 570418478}
   playerController: {fileID: 1763313299}
-  partnerHPSlider: {fileID: 1884438111}
-  playerHPSlider: {fileID: 747723517}
-  partnerFillImage: {fileID: 262312701}
-  normalColor: {r: 0, g: 1, b: 1, a: 1}
+  mainHPSlider: {fileID: 747723517}
+  mainFillImage: {fileID: 2109564249}
+  playerHPColor: {r: 0, g: 1, b: 0, a: 1}
+  partnerHPColor: {r: 0, g: 1, b: 1, a: 1}
   disabledColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
 --- !u!4 &1040324410
 Transform:
@@ -2544,9 +2547,10 @@ GameObject:
   - component: {fileID: 1763313301}
   - component: {fileID: 1763313300}
   - component: {fileID: 1763313299}
+  - component: {fileID: 1763313304}
   m_Layer: 0
   m_Name: Player
-  m_TagString: Untagged
+  m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -2600,8 +2604,8 @@ MonoBehaviour:
   utilityFireRate: 2
   formationPrefab: {fileID: 5116040381919507593, guid: c28cdab0e347c8742a55c38eb92348a6, type: 3}
   maxHealCharges: 3
-  healAmount: 30
   maxHealth: 100
+  currentHealth: 0
   trajectoryLine: {fileID: 1787491977}
   throwForce: 18
   partnerGravityScale: 1
@@ -2759,6 +2763,26 @@ Transform:
   - {fileID: 1563900809}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1763313304
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1763313298}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 419275485288be84ab3a30a705c609ac, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerShooting
+  muzzlePoint: {fileID: 1563900809}
+  fireRange: 50
+  normalDamage: 15
+  healAmount: 20
+  hitLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  currentBulletType: 0
 --- !u!1 &1787491976
 GameObject:
   m_ObjectHideFlags: 0
@@ -2933,7 +2957,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1884438110
 RectTransform:
   m_ObjectHideFlags: 0

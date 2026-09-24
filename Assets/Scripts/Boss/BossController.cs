@@ -36,7 +36,6 @@ namespace Tether.Boss
         public BossChainsawSweepState LowSweepState { get; private set; }
         public BossChainsawSweepState HighSweepState { get; private set; }
         public BossThrowState ThrowState { get; private set; }
-        // 在欄位區新增階段 2 招式
         public BossDashAttackState DashAttackState { get; private set; }
         public BossBackhandState BackhandState { get; private set; }
         public BossHarpoonPullState HarpoonPullState { get; private set; }
@@ -52,7 +51,9 @@ namespace Tether.Boss
         public BossAttackState AttackState { get; private set; }
 
         public float CurrentHealth => currentHealth;
+        public float MaxHealth => maxHealth;
         public float CurrentAnger => currentAnger;
+        public float MaxAnger => maxAnger;
         public AngerPhase CurrentAngerPhase => currentAngerPhase;
         public Transform PlayerTransform => playerTransform;
         public Transform PartnerTransform => partnerTransform;
@@ -82,6 +83,9 @@ namespace Tether.Boss
         {
             StateMachine.Initialize(IdleState);
             UpdateAngerPhase();
+
+            // 初始化 UI 顯示
+            OnHealthChanged?.Invoke(currentHealth, maxHealth);
         }
 
         private void Update()
@@ -89,26 +93,14 @@ namespace Tether.Boss
             if (StateMachine.CurrentState != null)
                 StateMachine.CurrentState.LogicUpdate();
 
-            // --- 測試專用 (測試完可刪除) ---
-            /*if (Input.GetKeyDown(KeyCode.T))
-            {
-                TakeDamage(50f); // 按 T 鍵扣 50 血
-            }
-            if (Input.GetKeyDown(KeyCode.G))
-            {
-                AddAnger(25f);  // 按 G 鍵增加 25 憤怒值
-            }*/
             // =================【階段 1 測試按鍵】=================
             if (Input.GetKeyDown(KeyCode.Alpha1)) StateMachine.ChangeState(LowSweepState);
             if (Input.GetKeyDown(KeyCode.Alpha2)) StateMachine.ChangeState(HighSweepState);
             if (Input.GetKeyDown(KeyCode.Alpha3)) StateMachine.ChangeState(ThrowState);
 
             // =================【階段 2 測試按鍵】=================
-            // 按 4：氣動 Dash
             if (Input.GetKeyDown(KeyCode.Alpha4)) StateMachine.ChangeState(DashAttackState);
-            // 按 5：回手掏
             if (Input.GetKeyDown(KeyCode.Alpha5)) StateMachine.ChangeState(BackhandState);
-            // 按 6：DBD 死亡槍手拉扯
             if (Input.GetKeyDown(KeyCode.Alpha6)) StateMachine.ChangeState(HarpoonPullState);
         }
 
@@ -146,10 +138,20 @@ namespace Tether.Boss
             OnAngerChanged?.Invoke(currentAnger, maxAnger, currentAngerPhase);
         }
 
+        /// <summary>
+        /// Boss 受傷核心邏輯
+        /// </summary>
         public void TakeDamage(float amount)
         {
             currentHealth = Mathf.Clamp(currentHealth - amount, 0f, maxHealth);
+
+            // 企劃需求：造成傷害時同時增加 Boss 憤怒值
+            AddAnger(amount);
+
+            // 廣播給 UI 更新 HP
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
+
+            Debug.Log($"<color=red>[Boss] 受到 {amount} 點傷害！剩餘 HP: {currentHealth}/{maxHealth}，當前憤怒值: {currentAnger}/{maxAnger}</color>");
 
             if (currentHealth <= 0f) Die();
         }

@@ -21,16 +21,31 @@ namespace Tether.Boss
             transform.Translate(moveDirection * speed * Time.deltaTime, Space.World);
         }
 
-        private void OnTriggerEnter2D(Collider2D collision)
+        private void OnTriggerEnter2D(Collider2D other)
         {
-            if (collision.CompareTag("Player"))
+            float damage = 15f; // 設定投射物傷害
+
+            if (other.CompareTag("Player"))
             {
-                Debug.Log($"<color=red>[投擲物] 擊中玩家！造成 {damage} 點傷害！</color>");
-                Destroy(gameObject);
+                PlayerController player = other.GetComponent<PlayerController>();
+                if (player != null)
+                {
+                    player.TakeDamageFromEnemy(damage);
+                    Debug.Log($"<color=red>[Boss 投射物] 命中玩家！造成 {damage} 點傷害</color>");
+                }
+                Destroy(gameObject); // 命中後銷毀子彈
             }
-            else if (collision.CompareTag("Ground"))
+            else if (other.CompareTag("Partner"))
             {
-                Destroy(gameObject);
+                PartnerController partner = other.GetComponent<PartnerController>();
+                if (partner == null) partner = other.GetComponentInParent<PartnerController>();
+
+                if (partner != null)
+                {
+                    partner.TakeDamage(damage);
+                    Debug.Log($"<color=red>[Boss 投射物] 命中夥伴！造成 {damage} 點傷害</color>");
+                }
+                Destroy(gameObject); // 命中後銷毀子彈
             }
         }
     }
