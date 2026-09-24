@@ -23,9 +23,17 @@ public class PartnerController : MonoBehaviour
     [SerializeField] private float rushDuration = 0.5f;     // 衝刺持續時間
     [SerializeField] private float recallSpeed = 30f;       // 收回時飛回主角的速度
 
-    private float rushTimer = 0f;                          // 衝刺計時器
+    private float rushTimer = 0f;                           // 衝刺計時器
     private bool isRushing = false;                        // 是否正在衝刺狀態
-    private bool isRecalling = false;                      // 【關鍵】是否正在高速飛回主角身邊
+    private bool isRecalling = false;                      // 是否正在高速飛回主角身邊
+
+    // ==========================================
+    // Parry 招架機制參數
+    // ==========================================
+    [Header("Parry 招架機制 (0.3s 視窗)")]
+    [SerializeField] private float parryWindowDuration = 0.3f; // Parry 視窗長度
+    private float parryTimer = 0f;
+    private bool isParrying = false;
 
     [Header("血量與停機規則")]
     [SerializeField] private float maxHealth = 100f;
@@ -42,6 +50,7 @@ public class PartnerController : MonoBehaviour
     public bool IsDisabled => isDisabled;
     public float CurrentHealth => currentHealth;
     public float MaxHealth => maxHealth;
+    public bool IsParrying => isParrying; // 外部可查詢是否處於 Parry 狀態
 
     private void Awake()
     {
@@ -51,28 +60,24 @@ public class PartnerController : MonoBehaviour
         currentHealth = maxHealth;
     }
 
-    // 每次物件被 SetActive(true)（即按下 E 放出夥伴）時觸發
     private void OnEnable()
     {
         TriggerRushToBoss();
     }
 
-    /// <summary>
-    /// 觸發登場高速突進衝向 Boss
-    /// </summary>
     public void TriggerRushToBoss()
     {
         if (bossTransform != null && !isDisabled)
         {
             isRushing = true;
-            isRecalling = false; // 確保放出時重置收回狀態
+            isRecalling = false;
             rushTimer = rushDuration;
             Debug.Log("<color=orange>[Partner AI] 登場！發動超高速突進衝向 Boss！</color>");
         }
     }
 
     /// <summary>
-    /// 【新增】：由 SwitchManager 在按下 E 收回時呼叫，觸發飛回動畫
+    /// 【關鍵修復】：當按下 E 鍵召回時，清除拋物線投擲留下的物理重力與慣性
     /// </summary>
     public void StartRecalling()
     {
@@ -80,31 +85,78 @@ public class PartnerController : MonoBehaviour
 
         isRecalling = true;
         isRushing = false;
-        SetPartnerActive(true); // 確保飛回期間是顯示狀態
-        Debug.Log("<color=cyan>[Partner AI] 開始飛回主角身邊...</color>");
+        SetPartnerActive(true);
+
+        // 重置 Rigidbody2D 物理狀態，避免重力和殘留速度阻礙飛回
+        if (rb != null)
+        {
+            rb.gravityScale = 0f;             // 關閉重力
+            rb.linearVelocity = Vector2.zero; // 清空物理速度
+            rb.angularVelocity = 0f;          // 清空旋轉角速度
+        }
+
+        Debug.Log("<color=cyan>[Partner AI] 收到召回指令，清除物理慣性並飛回主角身邊...</color>");
+    }
+
+    /// <summary>
+    /// 觸發 0.3 秒精準 Parry 狀態
+    /// </summary>
+    public void TriggerParry()
+    {
+        if (isDisabled) return;
+
+        isParrying = true;
+        parryTimer = parryWindowDuration;
+        Debug.Log("<color=cyan>[Parry] 觸發 0.3 秒精準 Parry 視窗！</color>");
+    }
+
+    /// <summary>
+    /// 當受到傷害時檢查是否觸發 Parry 成功
+    /// </summary>
+    public bool CheckParrySuccess(GameObject attacker, float incomingDamage)
+    {
+        if (isParrying)
+        {
+            isParrying = false; // 成功 Parry 後立即消耗視窗
+            OnParrySuccess(attacker);
+            return true;
+        }
+        return false;
+    }
+
+    private void OnParrySuccess(GameObject attacker)
+    {
+        Debug.Log("<color=green>★★ 精準 Parry 成功！完美彈開攻擊並造成打斷效果 ★★</color>");
     }
 
     private void Update()
     {
+        // Parry 視窗倒數計時
+        if (isParrying)
+        {
+            parryTimer -= Time.deltaTime;
+            if (parryTimer <= 0f)
+            {
+                isParrying = false;
+                Debug.Log("<color=gray>[Parry] 招架視窗結束</color>");
+            }
+        }
+
         if (switchManager == null || playerTransform == null) return;
 
-        // 若停機狀態，維持隱藏且不執行 AI 邏輯
         if (isDisabled)
         {
             SetPartnerActive(false);
             return;
         }
 
-        // 1. 滑鼠游標自動決定面向
         HandleFacing();
 
-        // 2. 根據 SwitchManager 狀態切換顯示與 AI 行為
         if (switchManager.currentState == GameControlState.Deployed)
         {
-            isRecalling = false; // 若在中途再次切換為放出，立刻打斷收回
+            isRecalling = false;
             SetPartnerActive(true);
 
-            // 放出狀態：優先衝向 Boss 攻擊，若無視野目標則回歸平滑懸浮跟隨
             if (bossTransform != null)
             {
                 HandleBossAttackAI();
@@ -116,29 +168,25 @@ public class PartnerController : MonoBehaviour
         }
         else
         {
-            // 收回狀態：
             isRushing = false;
 
             if (isRecalling)
             {
-                // 【核心修復】：如果正處於收回狀態，平滑飛向主角
                 HandleRecallMovement();
             }
             else
             {
-                // 已飛抵身邊，維持隱藏並重置位置
-                SetPartnerActive(false);
+                if (!isParrying)
+                {
+                    SetPartnerActive(false);
+                }
                 transform.position = playerTransform.position;
             }
         }
     }
 
-    /// <summary>
-    /// 【新增】：處理飛回主角身邊的高速移動
-    /// </summary>
     private void HandleRecallMovement()
     {
-        // 飛向主角身邊的預設懸浮點
         Vector3 targetOffset = followOffset;
         if (playerTransform.localScale.x < 0)
         {
@@ -146,16 +194,21 @@ public class PartnerController : MonoBehaviour
         }
         Vector3 targetPosition = playerTransform.position + targetOffset;
 
-        // 使用 MoveTowards 以固定高速度 (recallSpeed) 朝主角飛去
+        // 確保召回期間不會受到任何物理加速度干擾
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.zero;
+        }
+
         transform.position = Vector3.MoveTowards(transform.position, targetPosition, recallSpeed * Time.deltaTime);
 
-        // 當距離極近時，代表已抵達主角身邊，正式完成收回並隱藏
-        if (Vector3.Distance(transform.position, targetPosition) < 0.2f)
+        // 飛回距離判定（距離小於 0.3f 即視為成功到達）
+        if (Vector3.Distance(transform.position, targetPosition) < 0.3f)
         {
             isRecalling = false;
-            SetPartnerActive(false);
+            if (!isParrying) SetPartnerActive(false);
             transform.position = playerTransform.position;
-            Debug.Log("<color=cyan>[Partner AI] 成功飛回主角身邊並隱藏！</color>");
+            Debug.Log("<color=cyan>[Partner AI] 成功飛回主角身邊並收回！</color>");
         }
     }
 
@@ -163,7 +216,7 @@ public class PartnerController : MonoBehaviour
 
     private void FollowPlayer()
     {
-        if (isAttacking) return; // 若正在播放攻擊動態則暫停平滑跟隨
+        if (isAttacking) return;
 
         Vector3 targetOffset = followOffset;
         if (playerTransform.localScale.x < 0)
@@ -177,15 +230,11 @@ public class PartnerController : MonoBehaviour
 
     private void HandleBossAttackAI()
     {
-        // 只計算水平 X 軸距離
         float distanceX = Mathf.Abs(transform.position.x - bossTransform.position.x);
 
-        // 優先處理登場高速衝刺
         if (isRushing)
         {
             rushTimer -= Time.deltaTime;
-
-            // 衝向 Boss 的水平方向
             float directionX = Mathf.Sign(bossTransform.position.x - transform.position.x);
 
             if (rb != null)
@@ -201,21 +250,18 @@ public class PartnerController : MonoBehaviour
                 );
             }
 
-            // 若已抵達攻擊範圍或衝刺時間結束，終止衝刺模式
             if (distanceX <= attackRange || rushTimer <= 0f)
             {
                 isRushing = false;
             }
 
-            return; // 衝刺期間跳過一般追擊與攻擊邏輯
+            return;
         }
 
-        // 一般接近 Boss 與攻擊邏輯
         if (distanceX > attackRange)
         {
             if (isAttacking) return;
 
-            // 自動衝向 Boss 方向
             float directionX = Mathf.Sign(bossTransform.position.x - transform.position.x);
             if (rb != null)
             {
@@ -232,7 +278,6 @@ public class PartnerController : MonoBehaviour
         }
         else
         {
-            // 抵達水平攻擊範圍，停下並發動攻擊
             if (rb != null) rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
 
             if (Time.time >= nextAttackTime)
@@ -247,7 +292,6 @@ public class PartnerController : MonoBehaviour
     {
         Debug.Log("<color=cyan>[Partner AI] 自動攻擊 Boss！（無體術傷害）</color>");
 
-        // 觸發衝擊打擊動態演出
         if (bossTransform != null)
         {
             Vector3 attackDir = (bossTransform.position - transform.position).normalized;
@@ -255,14 +299,12 @@ public class PartnerController : MonoBehaviour
         }
     }
 
-    // 由 PlayerController 在【放出狀態】射擊時呼叫：發動協同追擊
     public void TriggerCoopAttack()
     {
         if (switchManager.currentState == GameControlState.Deployed && !isDisabled)
         {
             Debug.Log("<color=cyan>[Partner AI] 響應主角射擊，進行協同追擊！</color>");
 
-            // 觸發較大範圍的突刺追擊動態
             Vector3 attackDir = bossTransform != null ?
                 (bossTransform.position - transform.position).normalized :
                 (isFacingRight ? Vector3.right : Vector3.left);
@@ -271,15 +313,12 @@ public class PartnerController : MonoBehaviour
         }
     }
 
-    // 微前衝 + 微上升折返的跳動攻擊動態
     private IEnumerator AttackPunchAnimation(Vector3 offset, float duration)
     {
         isAttacking = true;
         Vector3 startPos = transform.position;
-        // 加入些微 Y 軸向上彈跳量，呈現打擊動態
         Vector3 targetPos = startPos + offset + new Vector3(0, 0.3f, 0);
 
-        // 1. 前衝/打擊 phase (一半時間)
         float elapsed = 0f;
         float forwardTime = duration * 0.4f;
         while (elapsed < forwardTime)
@@ -289,7 +328,6 @@ public class PartnerController : MonoBehaviour
             yield return null;
         }
 
-        // 2. 收招/折返 phase (剩餘時間)
         float returnTime = duration * 0.6f;
         elapsed = 0f;
         while (elapsed < returnTime)
@@ -331,6 +369,11 @@ public class PartnerController : MonoBehaviour
     public void TakeDamage(float amount)
     {
         if (isDisabled) return;
+
+        if (CheckParrySuccess(null, amount))
+        {
+            return;
+        }
 
         currentHealth -= amount;
         Debug.Log($"<color=yellow>[Partner] 扣除夥伴血量：{amount}，剩餘：{currentHealth}/{maxHealth}</color>");

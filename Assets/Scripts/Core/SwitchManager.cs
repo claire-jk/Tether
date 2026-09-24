@@ -132,4 +132,21 @@ public class SwitchManager : MonoBehaviour
             }
         }
     }
+
+    /// <summary>
+    /// 切換 Recalled 與 Deployed 狀態
+    /// </summary>
+    public void ToggleState()
+    {
+        if (currentState == GameControlState.Recalled)
+        {
+            currentState = GameControlState.Deployed;
+        }
+        else
+        {
+            currentState = GameControlState.Recalled;
+        }
+
+        Debug.Log($"<color=yellow>[SwitchManager] 狀態切換為：{currentState}</color>");
+    }
 }

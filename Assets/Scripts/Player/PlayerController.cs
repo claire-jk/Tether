@@ -5,52 +5,65 @@ public class PlayerController : MonoBehaviour
     [Header("核心引用")]
     [SerializeField] private SwitchManager switchManager;
     [SerializeField] private PartnerController partnerController;
-    [SerializeField] private Transform partnerTransform; // 用於右鍵功能彈鎖定夥伴方向
+    [SerializeField] private Transform partnerTransform;
 
-    [Header("基礎移動與跳躍")]
-    [SerializeField] private float moveSpeed = 6f;
+    [Header("基礎移動手感參數 (企劃紅字)")]
+    [SerializeField] private float maxSpeed = 10f;           // 最高速度
+    [SerializeField] private float acceleration = 60f;      // 地面加速度
+    [SerializeField] private float deceleration = 80f;      // 地面減速度
+    [SerializeField] private float turnAcceleration = 120f; // 轉向加速度 (反向按 A/D 時)
+    [SerializeField] private float airAcceleration = 30f;    // 空中加速度
+    [SerializeField] private float airDeceleration = 10f;    // 空中減速度
+
+    [Header("跳躍手感參數 (土狼時間 & 緩衝)")]
     [SerializeField] private float jumpForce = 12f;
-    [SerializeField] private float doubleJumpForce = 10f;  // 收回狀態夥伴噴射二段跳高度
+    [SerializeField] private float doubleJumpForce = 10f;
+    [SerializeField] private float coyoteTime = 0.1f;       // 土狼時間 (0.1s)
+    [SerializeField] private float jumpBufferTime = 0.15f;   // 跳躍指令緩衝 (0.15s)
     [SerializeField] private Transform groundCheck;
     [SerializeField] private LayerMask groundLayer;
 
     [Header("Dash 與 背身滑步")]
-    [SerializeField] private float dashSpeed = 16f;        // 前衝 Dash 速度
-    [SerializeField] private float chargeDashSpeed = 24f;  // 長蓄力衝刺速度
-    [SerializeField] private float backstepSpeed = 10f;    // 背身滑步速度
+    [SerializeField] private float dashSpeed = 16f;
+    [SerializeField] private float chargeDashSpeed = 24f;
+    [SerializeField] private float backstepSpeed = 10f;
     [SerializeField] private float dashDuration = 0.2f;
-    [SerializeField] private float chargeDashDuration = 0.35f; // 長蓄力衝刺持續時間
+    [SerializeField] private float chargeDashDuration = 0.35f;
     [SerializeField] private float dashCooldown = 0.8f;
-    [SerializeField] private float chargeThreshold = 0.4f; // 按住 Shift 超過此時間轉換為長蓄力衝刺
+    [SerializeField] private float chargeThreshold = 0.4f;
 
     [Header("近戰棺槨連招系統")]
-    [SerializeField] private Transform attackPoint;        // 攻擊判定產生點 (AttackPoint)
-    [SerializeField] private float attackRange = 0.8f;      // 攻擊範圍半徑
-    [SerializeField] private LayerMask enemyLayer;          // 敵人的 Layer
-    [SerializeField] private float comboForwardImpulse = 2.5f; // 普通棺槨擊打時的小幅前衝力
+    [SerializeField] private Transform attackPoint;
+    [SerializeField] private float attackRange = 0.8f;
+    [SerializeField] private LayerMask enemyLayer;
+    [SerializeField] private float comboForwardImpulse = 2.5f;
 
     [Header("遠程彈藥系統")]
-    [SerializeField] private GameObject primaryBulletPrefab;  // 普攻彈 Prefab (PrimaryBullet)
-    [SerializeField] private GameObject utilityBulletPrefab;  // 功能彈 Prefab (UtilityBullet)
-    [SerializeField] private Transform firePoint;            // 開火點 Transform
-    [SerializeField] private float primaryFireRate = 0.15f;    // 普攻彈連射間隔時間 (秒)
-    [SerializeField] private float utilityFireRate = 2.0f;     // 右鍵功能彈冷卻時間 (秒)
-    [SerializeField] private GameObject formationPrefab;     // 陣式 Prefab
-    private FormationArea activeFormation;                    // 當前場上的陣式實體
-    private bool isPreparingFormation = false;                // 是否處於 R 鍵陣式預預瞄準狀態
-    private float nextPrimaryFireTime = 0f;                  // 普攻彈下次可射擊時間點
-    private float nextUtilityFireTime = 0f;                  // 功能彈下次可射擊時間點
+    [SerializeField] private GameObject primaryBulletPrefab;
+    [SerializeField] private GameObject utilityBulletPrefab;
+    [SerializeField] private Transform firePoint;
+    [SerializeField] private float primaryFireRate = 0.15f;
+    [SerializeField] private float utilityFireRate = 2.0f;
+    [SerializeField] private GameObject formationPrefab;
+    private FormationArea activeFormation;
+    private bool isPreparingFormation = false;
+    private float nextPrimaryFireTime = 0f;
+    private float nextUtilityFireTime = 0f;
 
-    [Header("機體資源")]
-    [SerializeField] private int maxHealCharges = 3;       // Q 鍵回血最大次數
-    [SerializeField] private float healAmount = 30f;       // 每一次 Q 鍵恢復的血量（可自訂）
-    private int currentHealCharges;
-
-    [Header("主角血量設定")]
+    [Header("機體資源與血量")]
+    [SerializeField] private int maxHealCharges = 3;
+    [SerializeField] private float healAmount = 30f;
     [SerializeField] private float maxHealth = 100f;
+
+    [Header("Parry & 投擲拋物線參數")]
+    [SerializeField] private TrajectoryLine trajectoryLine; // 引用拋物線
+    [SerializeField] private float throwForce = 18f;        // 投擲初始速度
+    [SerializeField] private float partnerGravityScale = 1f; // 夥伴投擲時的重力係數
+    [SerializeField] private KeyCode parryKey = KeyCode.F;   // 【新增】：Parry 按鍵定義 (預設 F 鍵)
+    private bool isAimingThrow = false;                     // 【新增】：記錄是否正在按住右鍵瞄準投擲
+    private int currentHealCharges;
     private float currentHealth;
 
-    // 提供給 UI 讀取的公用屬性 (Property)
     public float MaxHealth => maxHealth;
     public float CurrentHealth => currentHealth;
 
@@ -60,7 +73,11 @@ public class PlayerController : MonoBehaviour
     private bool isFacingRight = true;
     private bool canDoubleJump;
 
-    // Dash / 滑步 / 蓄力內部狀態
+    // 手感優化內部計時器
+    private float coyoteTimeCounter;   // 土狼時間計時器
+    private float jumpBufferCounter;   // 跳躍緩衝計時器
+
+    // Dash 內部狀態
     private bool isDashing;
     private float dashTimer;
     private float nextDashTime;
@@ -69,22 +86,21 @@ public class PlayerController : MonoBehaviour
     private float shiftHoldTimer;
     private bool isChargingDash;
 
-    // 攻擊物理與連招內部狀態
-    private float attackMoveTimer;                         // 上跳/下壓攻擊位移保護計時器
-    private int comboStep = 0;                              // 當前連擊段數 (0~4)
-    private float lastComboTime;                            // 上次攻擊時間
-    private float comboResetDelay = 1.0f;                   // 連招重置等待時間
+    // 攻擊內部狀態
+    private float attackMoveTimer;
+    private int comboStep = 0;
+    private float lastComboTime;
+    private float comboResetDelay = 1.0f;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         currentHealCharges = maxHealCharges;
-        currentHealth = maxHealth; // 初始化主角血量
+        currentHealth = maxHealth;
     }
 
     private void Update()
     {
-        // 滑步/Dash 進行中暫停其他動作輸入
         if (isDashing)
         {
             dashTimer -= Time.deltaTime;
@@ -92,41 +108,68 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        // 1. 通用：面向始終由滑鼠游標位置決定
+        // 1. 面向滑鼠
         HandleFacing();
 
-        // 2. 地面檢測
+        // 2. 地面檢測與「土狼時間」計時
         if (groundCheck != null)
         {
             isGrounded = Physics2D.OverlapCircle(groundCheck.position, 0.2f, groundLayer);
         }
 
-        if (isGrounded) canDoubleJump = true;
+        if (isGrounded)
+        {
+            coyoteTimeCounter = coyoteTime; // 站在地面時，刷新土狼時間
+            canDoubleJump = true;
+        }
+        else
+        {
+            coyoteTimeCounter -= Time.deltaTime; // 離地時開始倒數
+        }
 
-        // 3. 通用：跳躍與二段跳判定
+        // 3. 「跳躍指令緩衝」計時
+        if (Input.GetButtonDown("Jump"))
+        {
+            jumpBufferCounter = jumpBufferTime; // 按下跳躍時，開啟緩衝窗口
+        }
+        else
+        {
+            jumpBufferCounter -= Time.deltaTime;
+        }
+
+        // 4. 觸發跳躍邏輯
         HandleJumping();
 
-        // 4. 通用：Q 鍵主角回血
+        // 5. Q 鍵回血
         if (Input.GetKeyDown(KeyCode.Q))
         {
             UseHeal();
         }
 
-        // 5. 核心：根據 SwitchManager 狀態進行戰鬥輸入分流
+        // 6. 根據狀態分流戰鬥輸入
         if (switchManager != null)
         {
             if (switchManager.currentState == GameControlState.Recalled)
             {
-                // 切換為收回狀態時重置陣式預備
                 isPreparingFormation = false;
-                // 【收回狀態】：近戰體術招式組
                 HandleRecalledCombatInputs();
             }
             else
             {
-                // 【放出狀態】：遠程彈藥系統
+                // 若切換為 Deployed，關閉投擲預覽線
+                if (trajectoryLine != null && trajectoryLine.gameObject.activeSelf)
+                {
+                    trajectoryLine.HideLine();
+                }
+                isAimingThrow = false;
                 HandleDeployedRangedInputs();
             }
+        }
+
+        // 【新增】：如果在 Recalled 狀態且正在右鍵瞄準投擲，即時更新繪製拋物線
+        if (isAimingThrow)
+        {
+            UpdateThrowTrajectory();
         }
     }
 
@@ -138,44 +181,77 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        // 如果正在上跳/下壓攻擊位移中，暫停玩家按鍵對 X 軸速度的強制覆蓋
         if (attackMoveTimer > 0f)
         {
             attackMoveTimer -= Time.fixedDeltaTime;
             return;
         }
 
-        // 標準 A / D 左右移動
-        float moveInput = Input.GetAxisRaw("Horizontal");
-        rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
+        // 高級平滑移動物理 (Acceleration / Deceleration)
+        HandleMovement();
     }
 
-    #region 跳躍與 Dash 邏輯
+    #region 手感優化：平滑移動與跳躍處理
+
+    private void HandleMovement()
+    {
+        float targetInput = Input.GetAxisRaw("Horizontal");
+        float targetSpeed = targetInput * maxSpeed;
+        float currentSpeedX = rb.linearVelocity.x;
+
+        float accelRate;
+
+        // 根據是否在地面，選擇使用地面或空中的加速度/減速度
+        if (Mathf.Abs(targetInput) > 0.01f)
+        {
+            bool isTurning = (targetInput > 0 && currentSpeedX < 0) || (targetInput < 0 && currentSpeedX > 0);
+
+            if (isGrounded)
+            {
+                accelRate = isTurning ? turnAcceleration : acceleration;
+            }
+            else
+            {
+                // 在空中使用 airAcceleration
+                accelRate = airAcceleration;
+            }
+        }
+        else
+        {
+            // 放開按鍵時：在地面用 deceleration，在空中用 airDeceleration
+            accelRate = isGrounded ? deceleration : airDeceleration;
+        }
+
+        float newSpeedX = Mathf.MoveTowards(currentSpeedX, targetSpeed, accelRate * Time.deltaTime);
+        rb.linearVelocity = new Vector2(newSpeedX, rb.linearVelocity.y);
+    }
 
     private void HandleJumping()
     {
-        if (Input.GetButtonDown("Jump"))
+        // 條件 1：跳躍緩衝內有輸入 (jumpBufferCounter > 0)
+        // 條件 2：處於土狼時間許可範圍內 (coyoteTimeCounter > 0)
+        if (jumpBufferCounter > 0f && coyoteTimeCounter > 0f)
         {
-            if (isGrounded)
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+            jumpBufferCounter = 0f;  // 消耗緩衝
+            coyoteTimeCounter = 0f;  // 消耗土狼時間
+        }
+        // 二段跳（夥伴協助噴射跳）
+        else if (jumpBufferCounter > 0f && canDoubleJump && switchManager != null && switchManager.currentState == GameControlState.Recalled)
+        {
+            if (partnerController != null && !partnerController.IsDisabled)
             {
-                rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
-            }
-            else if (canDoubleJump && switchManager != null && switchManager.currentState == GameControlState.Recalled)
-            {
-                // 收回狀態專屬：二段跳（夥伴噴射跳），需確認 Partner 未停機
-                if (partnerController != null && !partnerController.IsDisabled)
-                {
-                    rb.linearVelocity = new Vector2(rb.linearVelocity.x, doubleJumpForce);
-                    canDoubleJump = false;
-                    Debug.Log("<color=cyan>[Recalled] 夥伴噴射二段跳發動！</color>");
-                }
-                else
-                {
-                    Debug.Log("<color=red>[Recalled] 夥伴已停機，無法使用噴射二段跳！</color>");
-                }
+                rb.linearVelocity = new Vector2(rb.linearVelocity.x, doubleJumpForce);
+                canDoubleJump = false;
+                jumpBufferCounter = 0f;
+                Debug.Log("<color=cyan>[Recalled] 夥伴噴射二段跳發動！</color>");
             }
         }
     }
+
+    #endregion
+
+    #region Dash 邏輯
 
     private void TriggerDash(float moveInput, bool isCharged)
     {
@@ -189,51 +265,35 @@ public class PlayerController : MonoBehaviour
 
         if (Mathf.Approximately(inputDir, facingDir))
         {
-            // 同方向：前衝 Dash / 長蓄力 Dash
             dashDirection = facingDir;
             currentActiveDashSpeed = isCharged ? chargeDashSpeed : dashSpeed;
             dashTimer = isCharged ? chargeDashDuration : dashDuration;
-
-            if (isCharged)
-                Debug.Log("<color=red>[Dash] 長蓄力強烈前衝 Dash！</color>");
-            else
-                Debug.Log("<color=orange>[Dash] 前衝 Dash！</color>");
         }
         else
         {
-            // 反方向：背身滑步 (較短位移)
             dashDirection = inputDir;
             currentActiveDashSpeed = backstepSpeed;
             dashTimer = dashDuration;
-            Debug.Log("<color=yellow>[Dash] 背身滑步！</color>");
         }
     }
 
     #endregion
 
-    #region 【收回狀態】近戰體術招式組
+    #region 近戰招式組 (Recalled)
 
     private void HandleRecalledCombatInputs()
     {
-        if (partnerController != null && partnerController.IsDisabled)
-        {
-            // 夥伴停機時的限制邏輯
-        }
-
-        // 連招超時未按，自動重置回第一擊
         if (Time.time - lastComboTime > comboResetDelay)
         {
             comboStep = 0;
         }
 
-        // 1. Dash / 長蓄力 Dash / 背身滑步 (A/D + Shift)
         if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
         {
             shiftHoldTimer += Time.deltaTime;
             if (shiftHoldTimer >= chargeThreshold && !isChargingDash)
             {
                 isChargingDash = true;
-                Debug.Log("<color=yellow>[Dash] 進入蓄力狀態...</color>");
             }
         }
 
@@ -248,7 +308,7 @@ public class PlayerController : MonoBehaviour
             isChargingDash = false;
         }
 
-        // 2. 招式組合判斷 (W/S/鍵盤 + 左鍵)
+        // 近戰左鍵攻擊
         if (Input.GetMouseButtonDown(0))
         {
             if (Input.GetKey(KeyCode.W))
@@ -264,6 +324,31 @@ public class PlayerController : MonoBehaviour
                 PerformNormalMeleeAttack();
             }
         }
+
+        // ==========================================
+        // 【新增】：Parry 按鍵觸發 (F 鍵)
+        // ==========================================
+        if (Input.GetKeyDown(parryKey))
+        {
+            PerformParry();
+        }
+
+        // ==========================================
+        // 【新增】：長按右鍵預覽投擲拋物線，放開時丟出夥伴
+        // ==========================================
+        if (Input.GetMouseButtonDown(1))
+        {
+            isAimingThrow = true;
+        }
+        else if (Input.GetMouseButtonUp(1))
+        {
+            if (isAimingThrow)
+            {
+                ThrowPartner();
+                isAimingThrow = false;
+                if (trajectoryLine != null) trajectoryLine.HideLine();
+            }
+        }
     }
 
     private void PerformUpwardAttack()
@@ -271,8 +356,6 @@ public class PlayerController : MonoBehaviour
         float facingDir = isFacingRight ? 1f : -1f;
         rb.linearVelocity = new Vector2(facingDir * 8f, jumpForce * 0.95f);
         attackMoveTimer = 0.15f;
-
-        Debug.Log("<color=red>[Recalled] 觸發：W + 左鍵 上跳攻擊！（空中可再接二段跳）</color>");
         ExecuteHitDetection(1.2f, "上跳攻擊");
     }
 
@@ -280,8 +363,6 @@ public class PlayerController : MonoBehaviour
     {
         rb.linearVelocity = new Vector2(rb.linearVelocity.x, -jumpForce * 1.4f);
         attackMoveTimer = 0.2f;
-
-        Debug.Log("<color=red>[Recalled] 觸發：空中 S + 左鍵 下壓攻擊！</color>");
         ExecuteHitDetection(1.5f, "下壓攻擊");
     }
 
@@ -294,29 +375,76 @@ public class PlayerController : MonoBehaviour
 
         float facingDir = isFacingRight ? 1f : -1f;
         rb.linearVelocity = new Vector2(facingDir * comboForwardImpulse * comboStep, rb.linearVelocity.y);
-
-        Debug.Log($"<color=red>[Recalled] 棺槨四段擊：第 {comboStep} 擊！</color>");
         ExecuteHitDetection(1.0f + (comboStep * 0.2f), $"棺槨第 {comboStep} 擊");
     }
 
     private void ExecuteHitDetection(float damageMultiplier, string attackName)
     {
         if (attackPoint == null) return;
-
         Collider2D[] hitEnemies = Physics2D.OverlapCircleAll(attackPoint.position, attackRange, enemyLayer);
         foreach (Collider2D enemy in hitEnemies)
         {
-            Debug.Log($"<color=yellow>[Hit!] {attackName} 命中目標：{enemy.name} (倍率: {damageMultiplier})</color>");
+            Debug.Log($"<color=yellow>[Hit!] {attackName} 命中目標：{enemy.name}</color>");
         }
+    }
+
+    // ==========================================
+    // 【新增】：Parry 與 投擲夥伴 邏輯實作
+    // ==========================================
+    private void PerformParry()
+    {
+        if (partnerController != null && !partnerController.IsDisabled)
+        {
+            partnerController.TriggerParry();
+            Debug.Log("<color=cyan>[Player] 發動招架 (Parry)！</color>");
+        }
+    }
+
+    private void UpdateThrowTrajectory()
+    {
+        if (trajectoryLine == null) return;
+
+        Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        mouseWorldPos.z = 0f;
+
+        Vector3 startPos = transform.position;
+        Vector2 throwDirection = (mouseWorldPos - startPos).normalized;
+        Vector2 startingVelocity = throwDirection * throwForce;
+
+        trajectoryLine.RenderLine(startPos, startingVelocity, partnerGravityScale);
+    }
+
+    private void ThrowPartner()
+    {
+        if (switchManager == null || partnerController == null || partnerController.IsDisabled) return;
+
+        Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        mouseWorldPos.z = 0f;
+
+        Vector2 throwDirection = (mouseWorldPos - transform.position).normalized;
+        Vector2 throwVelocity = throwDirection * throwForce;
+
+        // 1. 將 SwitchManager 狀態切換為 Deployed (放出夥伴)
+        switchManager.ToggleState();
+
+        // 2. 設定夥伴位置並施加拋物線物理力量
+        partnerTransform.position = transform.position;
+        Rigidbody2D partnerRb = partnerTransform.GetComponent<Rigidbody2D>();
+        if (partnerRb != null)
+        {
+            partnerRb.gravityScale = partnerGravityScale;
+            partnerRb.linearVelocity = throwVelocity;
+        }
+
+        Debug.Log("<color=orange>[Player] 沿著拋物線投擲出夥伴！</color>");
     }
 
     #endregion
 
-    #region 【放出狀態】遠程彈藥與資源
+    #region 遠程與資源 (Deployed)
 
     private void HandleDeployedRangedInputs()
     {
-        // 1. 左鍵處理：部署陣式或普攻彈連射
         if (isPreparingFormation)
         {
             if (Input.GetMouseButtonDown(0))
@@ -336,7 +464,6 @@ public class PlayerController : MonoBehaviour
             }
         }
 
-        // 2. 右鍵功能彈（自動鎖定夥伴方向發射，帶冷卻判斷）
         if (Input.GetMouseButtonDown(1))
         {
             if (Time.time >= nextUtilityFireTime)
@@ -344,13 +471,8 @@ public class PlayerController : MonoBehaviour
                 ShootUtilityBulletToPartner();
                 nextUtilityFireTime = Time.time + utilityFireRate;
             }
-            else
-            {
-                Debug.Log($"<color=yellow>[Deployed] 功能彈冷卻中... 剩餘 {(nextUtilityFireTime - Time.time):F1} 秒</color>");
-            }
         }
 
-        // 3. R 鍵陣式彈
         if (Input.GetKeyDown(KeyCode.R))
         {
             HandleFormationKey();
@@ -360,50 +482,26 @@ public class PlayerController : MonoBehaviour
     private void ShootPrimaryBullet()
     {
         if (primaryBulletPrefab == null || firePoint == null) return;
-
         Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         Vector2 fireDirection = (mousePos - firePoint.position).normalized;
 
-        // 生成普攻彈 Prefab
         GameObject bulletObj = Instantiate(primaryBulletPrefab, firePoint.position, Quaternion.identity);
         Bullet bullet = bulletObj.GetComponent<Bullet>();
-        if (bullet != null)
-        {
-            bullet.Initialize(fireDirection, GetComponent<Collider2D>());
-        }
+        if (bullet != null) bullet.Initialize(fireDirection, GetComponent<Collider2D>());
 
-        // 觸發 Partner 的協同追擊
-        if (partnerController != null)
-        {
-            partnerController.TriggerCoopAttack();
-        }
-
-        Debug.Log("<color=green>[Deployed] 左鍵：普攻彈發射！</color>");
+        if (partnerController != null) partnerController.TriggerCoopAttack();
     }
 
     private void ShootUtilityBulletToPartner()
     {
-        //【修改點】：將檢查條件改為 utilityBulletPrefab
         if (utilityBulletPrefab == null || firePoint == null || partnerTransform == null) return;
-
         Vector2 directionToPartner = (partnerTransform.position - firePoint.position).normalized;
 
-        //【修改點】：直接生成 utilityBulletPrefab
         GameObject bulletObj = Instantiate(utilityBulletPrefab, firePoint.position, Quaternion.identity);
         Bullet bullet = bulletObj.GetComponent<Bullet>();
-        if (bullet != null)
-        {
-            //【修改點】：調用基礎初始化即可（Prefab 上已設定好 Is Utility Bullet = true）
-            bullet.Initialize(directionToPartner, GetComponent<Collider2D>());
-        }
+        if (bullet != null) bullet.Initialize(directionToPartner, GetComponent<Collider2D>());
 
-        // 觸發 Partner 的協同追擊
-        if (partnerController != null)
-        {
-            partnerController.TriggerCoopAttack();
-        }
-
-        Debug.Log($"<color=cyan>[Deployed] 右鍵：功能彈！自動鎖定夥伴方向發射</color>");
+        if (partnerController != null) partnerController.TriggerCoopAttack();
     }
 
     private void HandleFormationKey()
@@ -413,65 +511,43 @@ public class PlayerController : MonoBehaviour
             activeFormation.RecallFormation();
             activeFormation = null;
             isPreparingFormation = false;
-            Debug.Log("<color=purple>[Deployed] R 鍵：手動收回場上陣式！</color>");
             return;
         }
 
         if (isPreparingFormation)
         {
             isPreparingFormation = false;
-            Debug.Log("<color=yellow>[Deployed] R 鍵：取消陣式預備狀態</color>");
         }
         else
         {
-            if (formationPrefab == null)
-            {
-                Debug.LogError("<color=red>[Deployed] 失敗：PlayerController 上的 Formation Prefab 未綁定！</color>");
-                return;
-            }
+            if (formationPrefab == null) return;
             isPreparingFormation = true;
-            Debug.Log("<color=purple>[Deployed] R 鍵：拿出陣式彈！請點擊左鍵指定部署位置</color>");
         }
     }
 
     private void DeployFormationToMousePosition()
     {
         if (formationPrefab == null) return;
-
         Vector3 mouseWorldPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         mouseWorldPos.z = 0f;
 
         GameObject obj = Instantiate(formationPrefab, mouseWorldPos, Quaternion.identity);
         activeFormation = obj.GetComponent<FormationArea>();
-
         isPreparingFormation = false;
-        Debug.Log($"<color=purple>[Deployed] 左鍵：成功部署陣式於位置 {mouseWorldPos}！</color>");
     }
 
     private void UseHeal()
     {
-        if (currentHealCharges > 0)
+        if (currentHealCharges > 0 && currentHealth < maxHealth)
         {
-            if (currentHealth >= maxHealth)
-            {
-                Debug.Log("<color=yellow>[Resource] 主角血量已滿，無法使用回血！</color>");
-                return;
-            }
-
             currentHealCharges--;
             currentHealth = Mathf.Min(maxHealth, currentHealth + healAmount);
-
-            Debug.Log($"<color=green>[Resource] 主角回血 {healAmount} 點！當前血量：{currentHealth}/{maxHealth}，剩餘回血次數：{currentHealCharges}/{maxHealCharges}</color>");
-        }
-        else
-        {
-            Debug.Log("<color=yellow>[Resource] 回血次數已用盡，請至休息點補充！</color>");
         }
     }
 
     #endregion
 
-    #region 通用面向、承傷與 Gizmos
+    #region 通用與 Gizmos
 
     public void TakeDamageFromEnemy(float damage)
     {
@@ -483,9 +559,7 @@ public class PlayerController : MonoBehaviour
                 return;
             }
         }
-
         currentHealth = Mathf.Max(0f, currentHealth - damage);
-        Debug.Log($"<color=red>[Player] 主角受到傷害：{damage}，剩餘血量：{currentHealth}/{maxHealth}</color>");
     }
 
     private void HandleFacing()
