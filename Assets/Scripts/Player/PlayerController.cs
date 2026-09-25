@@ -8,13 +8,9 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private PartnerController partnerController;
     [SerializeField] private Transform partnerTransform;
 
-    [Header("基礎移動手感參數 (企劃紅字)")]
-    [SerializeField] private float maxSpeed = 10f;           // 最高速度
-    [SerializeField] private float acceleration = 60f;      // 地面加速度
-    [SerializeField] private float deceleration = 80f;      // 地面減速度
-    [SerializeField] private float turnAcceleration = 120f; // 轉向加速度 (反向按 A/D 時)
-    [SerializeField] private float airAcceleration = 30f;    // 空中加速度
-    [SerializeField] private float airDeceleration = 10f;    // 空中減速度
+    [Header("基礎移動手感參數 (企劃第 1 項)")]
+    [SerializeField] private MovementData playerGroundMove = new MovementData(10f, 60f, 80f, 120f); // 主角地面組
+    [SerializeField] private MovementData playerAirMove = new MovementData(10f, 30f, 10f, 60f);   // 主角空中組
 
     [Header("跳躍手感參數 (土狼時間 & 緩衝)")]
     [SerializeField] private float jumpForce = 12f;
@@ -217,30 +213,26 @@ public class PlayerController : MonoBehaviour
     private void HandleMovement()
     {
         float targetInput = Input.GetAxisRaw("Horizontal");
-        float targetSpeed = targetInput * maxSpeed;
+
+        // 根據在地面或空中，選擇對應的移動參數組
+        MovementData currentMoveData = isGrounded ? playerGroundMove : playerAirMove;
+
+        float targetSpeed = targetInput * currentMoveData.maxSpeed;
         float currentSpeedX = rb.linearVelocity.x;
 
         float accelRate;
 
-        // 根據是否在地面，選擇使用地面或空中的加速度/減速度
         if (Mathf.Abs(targetInput) > 0.01f)
         {
+            // 判斷是否正在反向轉向
             bool isTurning = (targetInput > 0 && currentSpeedX < 0) || (targetInput < 0 && currentSpeedX > 0);
 
-            if (isGrounded)
-            {
-                accelRate = isTurning ? turnAcceleration : acceleration;
-            }
-            else
-            {
-                // 在空中使用 airAcceleration
-                accelRate = airAcceleration;
-            }
+            accelRate = isTurning ? currentMoveData.turnAcceleration : currentMoveData.acceleration;
         }
         else
         {
-            // 放開按鍵時：在地面用 deceleration，在空中用 airDeceleration
-            accelRate = isGrounded ? deceleration : airDeceleration;
+            // 放開按鍵時使用減速度
+            accelRate = currentMoveData.deceleration;
         }
 
         float newSpeedX = Mathf.MoveTowards(currentSpeedX, targetSpeed, accelRate * Time.deltaTime);
@@ -409,7 +401,15 @@ public class PlayerController : MonoBehaviour
     {
         if (partnerController != null && !partnerController.IsDisabled)
         {
+            // 呼叫夥伴/系統的 Parry 邏輯 (含相機 5 度扭轉與 Hitbox 1f 恢復)
             partnerController.TriggerParry();
+
+            // 亦可同時觸發相機扭轉
+            if (Tether.Core.CameraShakeAndTilt.Instance != null)
+            {
+                Tether.Core.CameraShakeAndTilt.Instance.TriggerParryTilt(5f, 0.15f);
+            }
+
             Debug.Log("<color=cyan>[Player] 發動招架 (Parry)！</color>");
         }
     }
@@ -607,11 +607,17 @@ public class PlayerController : MonoBehaviour
     private IEnumerator HealRoutine()
     {
         isHealing = true;
-        Debug.Log("[Player] 開始喝水讀條 (2f)...");
+        Debug.Log("[Player] 開始喝水讀條 (2 秒)...");
 
-        // 等待 2 個影格 (2 Frames)
-        yield return new WaitForEndOfFrame();
-        yield return new WaitForEndOfFrame();
+        // 等待 2 秒鐘
+        float healDuration = 2.0f;
+        float timer = 0f;
+
+        while (timer < healDuration)
+        {
+            timer += Time.deltaTime;
+            yield return null; // 每影格持續檢查與等待
+        }
 
         // 讀條順利完成，扣除次數並恢復 40% 最大生命值
         currentHealCharges--;

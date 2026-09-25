@@ -911,6 +911,7 @@ GameObject:
   - component: {fileID: 519420031}
   - component: {fileID: 519420029}
   - component: {fileID: 519420030}
+  - component: {fileID: 519420033}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -1036,6 +1037,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &519420033
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 519420028}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b98e0e61c53ee44b84a33d8125222f9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Tether.Core.CameraShakeAndTilt
 --- !u!1 &570418473
 GameObject:
   m_ObjectHideFlags: 0
@@ -1225,6 +1238,26 @@ MonoBehaviour:
   aiMoveSpeed: 5
   attackRange: 1.5
   attackInterval: 1
+  partnerMechGroundMove:
+    maxSpeed: 12
+    acceleration: 70
+    deceleration: 90
+    turnAcceleration: 140
+  partnerMechAirMove:
+    maxSpeed: 12
+    acceleration: 35
+    deceleration: 15
+    turnAcceleration: 70
+  partnerNPCGroundMove:
+    maxSpeed: 8
+    acceleration: 40
+    deceleration: 60
+    turnAcceleration: 80
+  partnerNPCAirMove:
+    maxSpeed: 8
+    acceleration: 20
+    deceleration: 10
+    turnAcceleration: 40
   rushSpeed: 25
   rushDuration: 0.5
   recallSpeed: 30
@@ -2570,12 +2603,16 @@ MonoBehaviour:
   switchManager: {fileID: 277038069}
   partnerController: {fileID: 570418478}
   partnerTransform: {fileID: 570418477}
-  maxSpeed: 8
-  acceleration: 60
-  deceleration: 50
-  turnAcceleration: 100
-  airAcceleration: 30
-  airDeceleration: 10
+  playerGroundMove:
+    maxSpeed: 10
+    acceleration: 60
+    deceleration: 80
+    turnAcceleration: 120
+  playerAirMove:
+    maxSpeed: 10
+    acceleration: 30
+    deceleration: 10
+    turnAcceleration: 60
   jumpForce: 12
   doubleJumpForce: 10
   coyoteTime: 0.1

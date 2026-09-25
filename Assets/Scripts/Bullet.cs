@@ -17,6 +17,10 @@ public class Bullet : MonoBehaviour
     [SerializeField] private float damage = 10f;          // 普攻彈傷害值
     [SerializeField] private float repairAmount = 25f;    // 功能彈修復血量值
 
+    [Header("特效設定 (企劃第 11 項)")]
+    [SerializeField] private GameObject hitEffectPrefab; // 著彈點粒子特效 Prefab
+    [SerializeField] private float hitEffectDestroyTime = 1.0f; // 特效自動銷毀時間
+
     public float Speed { get => speed; set => speed = value; }
     public float Damage { get => damage; set => damage = value; }
     public bool IsUtilityBullet { get => isUtilityBullet; set => isUtilityBullet = value; }
@@ -112,6 +116,11 @@ public class Bullet : MonoBehaviour
                     partner.RepairHealth(repairAmount);
                     Debug.Log($"<color=cyan>[Bullet] 功能彈成功修復 Partner ({repairAmount} 點血量)！</color>");
                 }
+
+                // 計算撞擊點並生成修復/功能特效
+                Vector2 hitPoint = collision.ClosestPoint(transform.position);
+                SpawnHitEffect(hitPoint, -moveDirection);
+
                 Destroy(gameObject);
                 return;
             }
@@ -132,16 +141,48 @@ public class Bullet : MonoBehaviour
             }
 
             Debug.Log($"<color=red>[Bullet] 子彈命中 Boss：{collision.name}，造成 {damage} 點傷害！</color>");
+
+            // 計算撞擊點並生成擊中特效
+            Vector2 hitPoint = collision.ClosestPoint(transform.position);
+            SpawnHitEffect(hitPoint, -moveDirection);
+
             Destroy(gameObject);
             return;
         }
 
+        // 防卡地保護
         if (Time.time - spawnTime < spawnProtectionTime)
         {
             return;
         }
 
+        // 4. 擊中牆壁、地面或障礙物
         Debug.Log($"<color=yellow>[Bullet] 子彈擊中障礙物：{collision.name}</color>");
+
+        // 計算撞擊點並生成著彈特效
+        Vector2 obstacleHitPoint = collision.ClosestPoint(transform.position);
+        SpawnHitEffect(obstacleHitPoint, -moveDirection);
+
         Destroy(gameObject);
+    }
+
+    /// <summary>
+    /// 觸發著彈點粒子特效 (企劃第 11 項)
+    /// </summary>
+    /// <param name="spawnPosition">擊中點座標 (hit.point)</param>
+    /// <param name="hitNormal">擊中面的法線向量 (hit.normal)</param>
+    private void SpawnHitEffect(Vector3 spawnPosition, Vector2 hitNormal)
+    {
+        if (hitEffectPrefab == null) return;
+
+        // 根據法線計算角度，讓粒子朝向撞擊面外部噴發
+        float angle = Mathf.Atan2(hitNormal.y, hitNormal.x) * Mathf.Rad2Deg;
+        Quaternion rotation = Quaternion.AngleAxis(angle, Vector3.forward);
+
+        // 實例化著彈特效
+        GameObject effect = Instantiate(hitEffectPrefab, spawnPosition, rotation);
+
+        // 設定定時自動銷毀，避免記憶體洩漏
+        Destroy(effect, hitEffectDestroyTime);
     }
 }
