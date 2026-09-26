@@ -23,7 +23,19 @@ namespace Tether.Player
         [Header("當前子彈類型")]
         [SerializeField] private BulletType currentBulletType = BulletType.Normal;
 
+        [Header("陣勢彈 (Ground Formation) 設定")]
+        [SerializeField] private GameObject formationPrefab;      // 陣勢彈 / 陣地範圍 Prefab
+        [SerializeField] private float formationCooldown = 5f;    // 陣勢彈冷卻時間 (秒)
+
+        // 陣勢彈狀態管理變數
+        private GameObject currentFormationInstance; // 場上當前存在的陣勢彈實例
+        private float formationCooldownTimer = 0f;    // 陣勢彈當前冷卻計時器
+        private bool isFormationActive = false;       // 陣勢彈當前是否在場上
+
         private Camera mainCamera;
+
+        public float FormationCooldownTimer => formationCooldownTimer;
+        public bool IsFormationActive => isFormationActive;
 
         private void Awake()
         {
@@ -33,8 +45,19 @@ namespace Tether.Player
 
         private void Update()
         {
+            // 1. 冷卻時間倒數
+            if (formationCooldownTimer > 0f)
+            {
+                formationCooldownTimer -= Time.deltaTime;
+            }
+
+            // 2. 切換子彈 (Q 鍵)
             HandleBulletSwitch();
 
+            // 3. 【修復 Bug】按下 R 鍵取出 / 收回陣勢彈
+            HandleFormationToggleInput();
+
+            // 4. 左鍵射擊
             if (Input.GetMouseButtonDown(0))
             {
                 Shoot();
@@ -47,6 +70,35 @@ namespace Tether.Player
             {
                 currentBulletType = (BulletType)(((int)currentBulletType + 1) % 3);
                 Debug.Log($"<color=cyan>[射擊系統] 切換子彈類型為：{currentBulletType}</color>");
+            }
+        }
+
+        /// <summary>
+        /// 處理 R 鍵取出 / 收回陣勢彈邏輯
+        /// </summary>
+        private void HandleFormationToggleInput()
+        {
+            if (Input.GetKeyDown(KeyCode.R))
+            {
+                // 【核心修復點】：如果陣勢彈正在冷卻中，按下 R 鍵直接攔截，無事發生！
+                if (formationCooldownTimer > 0f)
+                {
+                    Debug.Log($"<color=yellow>[陣勢彈] 正在冷卻中！剩餘 {formationCooldownTimer:F1} 秒，無法執行收回/取出！</color>");
+                    return; // 直接返回，保護場上的陣勢彈範圍不被消失
+                }
+
+                // 若非冷卻中，判斷目前場上有無陣勢彈
+                if (isFormationActive)
+                {
+                    // 場上有陣勢彈 -> 執行收回
+                    RecallFormation();
+                }
+                else
+                {
+                    // 場上無陣勢彈 -> 切換子彈模式為 Ground (準備發射/部署)
+                    currentBulletType = BulletType.Ground;
+                    Debug.Log("<color=yellow>[射擊系統] 已手動裝填【陣地/陣勢子彈】，請瞄準地面射擊部署！</color>");
+                }
             }
         }
 
@@ -66,7 +118,10 @@ namespace Tether.Player
                 Vector2 hitPoint = hit.point;
                 GameObject hitObj = hit.collider.gameObject;
 
-                switch (currentBulletType)
+                // 保存當前子彈類型後進行處理
+                BulletType shotType = currentBulletType;
+
+                switch (shotType)
                 {
                     case BulletType.Normal:
                         ProcessNormalBullet(hitObj, hitPoint);
@@ -86,6 +141,7 @@ namespace Tether.Player
                 Debug.Log($"[射擊] 射向空處，未命中目標。");
             }
 
+            // 發射後若為特殊子彈（陣勢彈/治療彈），將子彈重置為【普攻子彈】
             if (currentBulletType != BulletType.Normal)
             {
                 currentBulletType = BulletType.Normal;
@@ -113,13 +169,27 @@ namespace Tether.Player
 
         private void ProcessGroundBullet(GameObject target, Vector2 hitPoint)
         {
+            // 檢查命中物件是否為地面
             if (target.CompareTag("Ground"))
             {
-                Debug.Log($"<color=yellow>★★ [陣地射彈] 命中地面 ({hitPoint})！觸發陣地效果 ★★</color>");
+                // 若場上已有陣勢彈，先清掉舊的
+                if (currentFormationInstance != null)
+                {
+                    Destroy(currentFormationInstance);
+                }
+
+                // 生成陣勢彈範圍 Prefab
+                if (formationPrefab != null)
+                {
+                    currentFormationInstance = Instantiate(formationPrefab, hitPoint, Quaternion.identity);
+                }
+
+                isFormationActive = true;
+                Debug.Log($"<color=yellow>★★ [陣地射彈] 命中地面 ({hitPoint})！部署陣勢彈範圍！ ★★</color>");
             }
             else
             {
-                Debug.Log($"[陣地射彈] 未命中地面，無效著彈。");
+                Debug.Log($"[陣地射彈] 未命中地面，無效著彈（未觸發陣地效果，也不造成普攻傷害）。");
             }
         }
 
@@ -140,6 +210,22 @@ namespace Tether.Player
             {
                 Debug.Log($"[治療射彈] 未命中夥伴，無法治療。");
             }
+        }
+
+        /// <summary>
+        /// 正常收回陣勢彈並觸發 CD
+        /// </summary>
+        public void RecallFormation()
+        {
+            if (currentFormationInstance != null)
+            {
+                Destroy(currentFormationInstance);
+            }
+
+            isFormationActive = false;
+            formationCooldownTimer = formationCooldown; // 開始進入冷卻
+
+            Debug.Log($"<color=cyan>[陣勢彈] 正常收回！開始進入 {formationCooldown} 秒冷卻！</color>");
         }
     }
 }

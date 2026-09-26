@@ -443,7 +443,7 @@ GameObject:
   - component: {fileID: 235213632}
   m_Layer: 0
   m_Name: Boss_Test
-  m_TagString: Enemy
+  m_TagString: Boss
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -1233,11 +1233,20 @@ MonoBehaviour:
   playerTransform: {fileID: 1763313303}
   switchManager: {fileID: 277038069}
   bossTransform: {fileID: 235213630}
+  enemyLayer:
+    serializedVersion: 2
+    m_Bits: 0
+  obstacleLayer:
+    serializedVersion: 2
+    m_Bits: 0
+  detectionRadius: 8
+  attackRange: 1.5
+  aiMoveSpeed: 5
+  attackInterval: 1
+  attackDamage: 15
+  maxUnreachableTime: 3
   followOffset: {x: -1.5, y: 1, z: 0}
   followSpeed: 5
-  aiMoveSpeed: 5
-  attackRange: 1.5
-  attackInterval: 1
   partnerMechGroundMove:
     maxSpeed: 12
     acceleration: 70
@@ -2818,8 +2827,10 @@ MonoBehaviour:
   healAmount: 20
   hitLayers:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 256
   currentBulletType: 0
+  formationPrefab: {fileID: 5116040381919507593, guid: c28cdab0e347c8742a55c38eb92348a6, type: 3}
+  formationCooldown: 5
 --- !u!1 &1787491976
 GameObject:
   m_ObjectHideFlags: 0
